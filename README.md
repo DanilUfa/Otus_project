@@ -15,6 +15,7 @@ C# / .NET 10 · ASP.NET Core Minimal API · PostgreSQL · EF Core · MassTransit
 | 4 | **Mediator** | поведение | **MassTransit/RabbitMQ** (`LeaveRequestSubmitted`, `LeaveRequestStatusChanged`) | вынесение взаимодействия между компонентами за шину: API публикует, Worker слушает |
 | 5 | **Adapter** | структура | `EmailNotificationSender` (MailKit ↔ `INotificationSender`); `LeaveRepository/UserRepository` (EF Core ↔ `ILeaveRepository/IUserRepository`) | сведение сторонней библиотеки/ORM к нашим интерфейсам |
 | 6 | **Singleton** | создание | `BalanceGate`, `VacationMetrics` — регистрации `AddSingleton` в DI | одно общее состояние (per-user async-замок; счётчики метрик) |
+| 7 | **State** | поведение | `Application/Patterns/LeaveState.cs` + use в `LeaveService` | жизненный цикл заявки: объекты-состояния запрещают нелегальные переходы (например, нельзя утвердить уже отклонённую) |
 
 ### Как объяснить **Observer + Mediator** на защите
 - **Издатель** (API в `LeaveService`) после сохранения заявки вызывает `IPublishEndpoint.Publish(...)`.
@@ -26,7 +27,7 @@ C# / .NET 10 · ASP.NET Core Minimal API · PostgreSQL · EF Core · MassTransit
 - `SemaphoreSlim` (`BalanceGate.LockAsync`) — **примитив синхронизации** (асинхронный замок на пользователя, защищает пересчёт баланса от гонок).
 - **Repository + DI** — изоляция доступа к данным за интерфейсами (`ILeaveRepository`, `IUserRepository`).
 
-> Честная заметка для защиты: `State` (жизненный цикл `LeaveStatus`), `Decorator`/`Memento`, Redis-кэш, Keycloak — в **роадмапе** (см. `ARCHITECTURE.md`), в этом MVP они не реализованы.
+> Честная заметка для защиты: `Decorator`/`Memento`, Redis-кэш, Keycloak — в **роадмапе** (см. `ARCHITECTURE.md`), в этом MVP не реализованы.
 
 ## Быстрый запуск одной командой (Docker)
 

@@ -30,7 +30,8 @@ public class LeaveService(
             .Reason(request.Reason ?? "")
             .Build();
 
-        leaveRequest.Status = LeaveStatus.Submitted; // → впечатление: Draft → Submitted
+        leaveRequest.Status = LeaveStatus.Submitted; // Draft → Submitted
+        LeaveState.For(LeaveStatus.Draft).EnsureCanTransitionTo(leaveRequest.Status);
 
         await leaveRepository.AddAsync(leaveRequest, ct);
         await leaveRepository.SaveAsync(ct);
@@ -61,6 +62,9 @@ public class LeaveService(
         // Только непосредственный руководитель сотрудника утверждает/отклоняет.
         if (owner.ManagerId != approverUserId)
             throw new UnauthorizedAccessException("Заявку может утвердить руководитель сотрудника.");
+
+        // State: запрещаем нелегальные переходы (например, утвердить уже отклонённую/не поданную).
+        LeaveState.For(lr.Status).EnsureCanTransitionTo(newStatus);
 
         lr.Status = newStatus;
         await leaveRepository.SaveAsync(ct);

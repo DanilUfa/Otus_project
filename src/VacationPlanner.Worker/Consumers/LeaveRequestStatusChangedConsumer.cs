@@ -29,10 +29,10 @@ public class LeaveRequestStatusChangedConsumer(
             return;
         }
 
-        var verb = e.Status == LeaveStatus.Approved ? "утверждён" : "отклонён";
-        var subject = $"{e.Status} заявки на отпуск #{e.RequestId}";
+        var verb = e.Status == LeaveStatus.Approved ? "утверждена" : "отклонена";
+        var subject = $"Заявка на отпуск #{e.RequestId} {verb}";
         var body = new StringBuilder()
-            .Append($"<h3>Ваш отпуск {verb}</h3>")
+            .Append($"<h3>Ваш отпуск {(e.Status == LeaveStatus.Approved ? "утверждён" : "отклонён")}</h3>")
             .Append($"<p>Заявка #{e.RequestId}</p>")
             .Append($"<p>Статус: <b>{verb}</b></p>")
             .Append($"<p>Период: {e.StartDate:yyyy-MM-dd} .. {e.EndDate:yyyy-MM-dd}</p>")

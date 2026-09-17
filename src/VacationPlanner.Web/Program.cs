@@ -95,7 +95,8 @@ api.MapPost("/auth/login", async (LoginRequest request, AuthService auth, Cancel
 
 // ---------- Users ----------
 api.MapGet("/users", async (IUserRepository users, CancellationToken ct)
-        => Results.Ok(await users.GetAllAsync(ct)))
+        => Results.Ok((await users.GetAllAsync(ct)).Select(u =>
+            new UserDto(u.Id, u.Name, u.Email, u.Role.ToString()))))
    .RequireAuthorization("AuthenticatedOnly")
    .WithName("GetUsers")
    ;

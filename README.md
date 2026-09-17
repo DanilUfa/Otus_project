@@ -2,6 +2,32 @@
 
 C# / .NET 10 · ASP.NET Core Minimal API · PostgreSQL · EF Core · MassTransit (RabbitMQ) · Redis (зарезервирован) · Swagger (Swashbuckle).
 
+## Шаблоны проектирования (что реализовано в коде)
+
+> Список — из программы курса. Ниже только те, что **есть в коде**, с указанием классов —
+> чтобы на защите можно было показать точное место.
+
+| # | Паттерн | Группа | Где в коде | Что даёт |
+|---|---------|--------|-----------|----------|
+| 1 | **Factory Method** | создание | `Application/Patterns/LeaveRequestFactory.cs` | единая точка создания `LeaveRequest` (тип/даты/статус), скрывает инициализацию |
+| 2 | **Builder** | создание | `Application/Patterns/LeaveRequestBuilder.cs` | пошаговое построение заявки (`ForUser().OfType().Between().Reason().Build()`), читаемо и валидируется |
+| 3 | **Observer** | поведение | доменные события `Events/*` + `Worker/Consumers/*` | подписчики узнают о событиях без прямой связи с источником |
+| 4 | **Mediator** | поведение | **MassTransit/RabbitMQ** (`LeaveRequestSubmitted`, `LeaveRequestStatusChanged`) | вынесение взаимодействия между компонентами за шину: API публикует, Worker слушает |
+| 5 | **Adapter** | структура | `EmailNotificationSender` (MailKit ↔ `INotificationSender`); `LeaveRepository/UserRepository` (EF Core ↔ `ILeaveRepository/IUserRepository`) | сведение сторонней библиотеки/ORM к нашим интерфейсам |
+| 6 | **Singleton** | создание | `BalanceGate`, `VacationMetrics` — регистрации `AddSingleton` в DI | одно общее состояние (per-user async-замок; счётчики метрик) |
+
+### Как объяснить **Observer + Mediator** на защите
+- **Издатель** (API в `LeaveService`) после сохранения заявки вызывает `IPublishEndpoint.Publish(...)`.
+- **Подписчики** (Worker: `LeaveRequestSubmittedConsumer`, `LeaveRequestStatusChangedConsumer`) сами не знают про издателя — регистрируются в `AddMassTransit`.
+- Транспорт (RabbitMQ) — это и есть медиатор: продюсер и консьюмер связаны только контрактом сообщения, а не кодом.
+- Проверка «вживую»: подаём заявку → в `logs/worker.log` видим пересчёт баланса и отправку письма; событие ловится консьюмером, хотя API «не знает» о Worker.
+
+### Дополнительно (усиливает аргумент, но не считается основным)
+- `SemaphoreSlim` (`BalanceGate.LockAsync`) — **примитив синхронизации** (асинхронный замок на пользователя, защищает пересчёт баланса от гонок).
+- **Repository + DI** — изоляция доступа к данным за интерфейсами (`ILeaveRepository`, `IUserRepository`).
+
+> Честная заметка для защиты: `State` (жизненный цикл `LeaveStatus`), `Decorator`/`Memento`, Redis-кэш, Keycloak — в **роадмапе** (см. `ARCHITECTURE.md`), в этом MVP они не реализованы.
+
 ## Быстрый запуск одной командой (Docker)
 
 ```bash

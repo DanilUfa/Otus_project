@@ -1,0 +1,17 @@
+# build artifacts
+bin/
+obj/
+*.user
+
+# node / frontend deps and build output
+node_modules/
+dist/
+src/VacationPlanner.Web/wwwroot/assets/
+
+# local logs (the agent reads these, no need to commit)
+logs/
+*.pid
+
+# IDE
+.vs/
+.idea/

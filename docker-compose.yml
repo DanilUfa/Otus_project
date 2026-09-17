@@ -1,0 +1,123 @@
+# Запуск одной командой:
+#   docker compose up -d --build
+# Проверка: http://localhost:5000/swagger  (API), http://localhost:15672 (RabbitMQ, vac/vac)
+
+name: vacation
+
+networks:
+  vacnet:
+
+volumes:
+  pgdata:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vac
+      POSTGRES_PASSWORD: vac
+      POSTGRES_DB: vacation
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vac -d vacation"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [vacnet]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [vacnet]
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: vac
+      RABBITMQ_DEFAULT_PASS: vac
+    ports: ["5672:5672", "15672:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks: [vacnet]
+
+  api:
+    build: { context: ., dockerfile: src/VacationPlanner.Web/Dockerfile }
+    environment:
+      ASPNETCORE_URLS: http://+:80
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=vacation;Username=vac;Password=vac
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: vac
+      RabbitMq__Password: vac
+      Jwt__Key: dev-only-secret-key-change-me-0123456789-0123456789
+      Jwt__Issuer: VacationPlanner
+      Jwt__Audience: VacationPlannerApi
+      # SMTP для уведомлений руководителю (например, П/годно по Outlook/Office365):
+      # Notifications__Email__Host: smtp.office365.com
+      # Notifications__Email__Port: 587
+      # Notifications__Email__Username: ...
+      # Notifications__Email__Password: ...
+      # Notifications__Email__From: ...
+    ports: ["5000:80"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    networks: [vacnet]
+
+  worker:
+    build: { context: ., dockerfile: src/VacationPlanner.Worker/Dockerfile }
+    environment:
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=vacation;Username=vac;Password=vac
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: vac
+      RabbitMq__Password: vac
+      # SMTP для уведомлений руководителю:
+      # Notifications__Email__Host: smtp.office365.com
+      # Notifications__Email__Port: 587
+      # Notifications__Email__Username: ...
+      # Notifications__Email__Password: ...
+      # Notifications__Email__From: ...
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [vacnet]
+
+  # ---------- Мониторинг: Prometheus + Grafana ----------
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes: [./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro]
+    ports: ["9090:9090"]
+    # API запущен на хосте (host.docker.internal:5000) — из-за CA-проблемы в Docker-сборке.
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [vacnet]
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
+    networks: [vacnet]
+
+  # ---------- Почтовый «ловец» уведомлений ----------
+  # SMTP :1025, веб-морда :8025 (все письма, отправленные приложением, видны в UI).
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["1025:1025", "8025:8025"]
+    networks: [vacnet]

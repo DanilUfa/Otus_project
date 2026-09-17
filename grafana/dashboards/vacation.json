@@ -1,0 +1,46 @@
+{
+  "uid": "vacation-overview",
+  "title": "Планирование отпусков — счётчики",
+  "tags": ["vacation"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Подано заявок",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [{ "expr": "sum(vacation_leaves_submitted_total)", "legendFormat": "Подано", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Утверждено",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [{ "expr": "sum(vacation_leaves_approved_total)", "legendFormat": "Утверждено", "refId": "B" }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Отклонено",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [{ "expr": "sum(vacation_leaves_declined_total)", "legendFormat": "Отклонено", "refId": "C" }]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Активность утверждений",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [{ "expr": "sum(rate(vacation_leaves_approved_total[5m]))", "legendFormat": "утв/с", "refId": "D" }]
+    }
+  ],
+  "templating": { "list": [] }
+}

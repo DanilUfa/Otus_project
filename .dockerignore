@@ -1,0 +1,9 @@
+**/bin
+**/obj
+**/.git
+**/node_modules
+.vs
+.vscode
+.DS_Store
+docs
+*.md

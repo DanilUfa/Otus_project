@@ -11,6 +11,7 @@ public static class DependencyInjection
         services.AddScoped<LeaveService>();
         services.AddScoped<BalanceService>();
         services.AddScoped<AuthService>();
+        services.AddScoped<StaleDraftService>();
         services.AddSingleton<BalanceGate>();
         services.AddSingleton<VacationMetrics>();
         return services;

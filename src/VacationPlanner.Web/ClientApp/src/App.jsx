@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { HubConnectionBuilder } from '@microsoft/signalr';
 import { api, TYPE_LABELS, TYPE_VALUES, STATUS_LABELS } from './api';
 
 const MONTHS = [
@@ -13,6 +14,20 @@ export default function App() {
   const [, force] = useState(0);
 
   useEffect(() => { if (user) refresh(); }, [user]);
+
+  // Realtime-подписка: новая заявка / смена статуса — мгновенно обновляем список и баланс.
+  useEffect(() => {
+    if (!user) return;
+    const conn = new HubConnectionBuilder()
+      .withUrl('/hubs/vacation', { accessTokenFactory: () => localStorage.getItem('token') || '' })
+      .withAutomaticReconnect()
+      .build();
+    conn.on('LeaveCreated', refresh);
+    conn.on('LeaveStatusChanged', refresh);
+    conn.start().catch(() => { /* SignalR опционален */ });
+    return () => { conn.stop().catch(() => {}); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   async function refresh() {
     try {

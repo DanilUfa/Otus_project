@@ -15,6 +15,14 @@ using VacationPlanner.Web;
 using VacationPlanner.Domain.Events;
 using VacationPlanner.Infrastructure;
 using VacationPlanner.Infrastructure.Security;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using VacationPlanner.Web.Caching;
+using VacationPlanner.Web.Health;
+using VacationPlanner.Web.Hubs;
+using VacationPlanner.Web.Realtime;
 using User = VacationPlanner.Domain.Entities.User;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -65,6 +73,21 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
+// --- SignalR (realtime) ---
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IRealtimeNotifier, RealtimeNotifier>();
+
+// --- Redis (IDistributedCache) ---
+var redisHost = builder.Configuration["Redis:Host"] ?? "localhost";
+var redisPort = int.TryParse(builder.Configuration["Redis:Port"], out var rp) ? rp : 6379;
+builder.Services.AddStackExchangeRedisCache(o => o.Configuration = $"{redisHost}:{redisPort}");
+
+// --- Health checks (readiness: db + rabbitmq + redis) ---
+builder.Services.AddHealthChecks()
+    .AddCheck<DbHealthCheck>("db")
+    .AddCheck("rabbitmq", new TcpHealthCheck(rabbit["Host"] ?? "localhost", 5672, "rabbitmq"))
+    .AddCheck("redis", new TcpHealthCheck(redisHost, redisPort, "redis"));
+
 var app = builder.Build();
 
 // Применяем миграции EF Core (схема управляется миграциями).
@@ -85,6 +108,16 @@ app.UseAuthorization();
 // Метрики для Prometheus — публичный эндпоинт /metrics.
 app.MapPrometheusMetrics(app.Services.GetRequiredService<VacationMetrics>());
 
+// Health: liveness (жив сам процесс) и readiness (готов отвечать: БД+Rabbit+Redis живы).
+app.MapGet("/health/live", () => Results.Ok("Healthy"));
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = c => c.Name is "db" or "rabbitmq" or "redis"
+});
+
+// SignalR-хаб для realtime-обновлений SPA.
+app.MapHub<VacationHub>("/hubs/vacation");
+
 var api = app.MapGroup("/api");
 
 // ---------- Auth ----------
@@ -94,9 +127,12 @@ api.MapPost("/auth/login", async (LoginRequest request, AuthService auth, Cancel
    ;
 
 // ---------- Users ----------
-api.MapGet("/users", async (IUserRepository users, CancellationToken ct)
-        => Results.Ok((await users.GetAllAsync(ct)).Select(u =>
-            new UserDto(u.Id, u.Name, u.Email, u.Role.ToString()))))
+api.MapGet("/users", async (IUserRepository users, IDistributedCache cache, CancellationToken ct)
+        => Results.Ok(await cache.GetOrSetAsync("users",
+            async () => (await users.GetAllAsync(ct))
+                .Select(u => new UserDto(u.Id, u.Name, u.Email, u.Role.ToString()))
+                .ToList(),
+            TimeSpan.FromSeconds(30), ct)))
    .RequireAuthorization("AuthenticatedOnly")
    .WithName("GetUsers")
    ;
@@ -112,6 +148,12 @@ api.MapPost("/leave", async (CreateLeaveRequestRequest request, LeaveService ser
         => Results.Created("/api/leave", await service.SubmitAsync(request, ct)))
    .RequireAuthorization("AuthenticatedOnly")
    .WithName("SubmitLeaveRequest")
+   ;
+
+api.MapPost("/leave/draft", async (CreateLeaveRequestRequest request, LeaveService service, CancellationToken ct)
+        => Results.Created("/api/leave", await service.SaveDraftAsync(request, ct)))
+   .RequireAuthorization("AuthenticatedOnly")
+   .WithName("SaveLeaveDraft")
    ;
 
 api.MapPost("/leave/{id:int}/approve", async (int id, LeaveService service, ClaimsPrincipal user, CancellationToken ct)
@@ -136,9 +178,15 @@ api.MapPost("/leave/{id:int}/decline", async (int id, LeaveService service, Clai
 
 // ---------- Balance ----------
 api.MapGet("/balance/{userId:int}", async (
-        int userId, [FromQuery] int? year, BalanceService balance, CancellationToken ct)
-        => Results.Ok(new { year = year ?? DateTime.UtcNow.Year,
-                            remaining = await balance.GetRemainingAnnualDaysAsync(userId, year ?? DateTime.UtcNow.Year, ct) }))
+        int userId, [FromQuery] int? year, BalanceService balance, IDistributedCache cache,
+        CancellationToken ct)
+        => {
+            var y = year ?? DateTime.UtcNow.Year;
+            var remaining = await cache.GetOrSetAsync($"balance:{userId}:{y}",
+                () => balance.GetRemainingAnnualDaysAsync(userId, y, ct),
+                TimeSpan.FromSeconds(60), ct);
+            return Results.Ok(new { year = y, remaining });
+        })
    .RequireAuthorization("AuthenticatedOnly")
    .WithName("GetRemainingBalance")
    ;

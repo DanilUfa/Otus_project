@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using VacationPlanner.Application.Contracts;
+using VacationPlanner.Domain;
 using VacationPlanner.Domain.Entities;
 
 namespace VacationPlanner.Infrastructure.Repositories;
@@ -22,6 +23,11 @@ public class LeaveRepository(AppDbContext db) : ILeaveRepository
         int userId, DateTime from, DateTime to, CancellationToken ct = default)
         => db.LeaveRequests
             .Where(r => r.UserId == userId && r.StartDate <= to && r.EndDate >= from)
+            .ToListAsync(ct);
+
+    public Task<List<LeaveRequest>> GetStaleDraftRequestsAsync(DateTime olderThan, CancellationToken ct = default)
+        => db.LeaveRequests
+            .Where(r => r.Status == LeaveStatus.Draft && r.CreatedAt < olderThan)
             .ToListAsync(ct);
 
     public Task SaveAsync(CancellationToken ct = default)

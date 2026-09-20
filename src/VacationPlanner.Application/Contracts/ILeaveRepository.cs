@@ -8,5 +8,6 @@ public interface ILeaveRepository
     Task<LeaveRequest?> GetByIdAsync(int id, CancellationToken ct = default);
     Task AddAsync(LeaveRequest request, CancellationToken ct = default);
     Task<List<LeaveRequest>> GetByUserInRangeAsync(int userId, DateTime from, DateTime to, CancellationToken ct = default);
+    Task<List<LeaveRequest>> GetStaleDraftRequestsAsync(DateTime olderThan, CancellationToken ct = default);
     Task SaveAsync(CancellationToken ct = default);
 }

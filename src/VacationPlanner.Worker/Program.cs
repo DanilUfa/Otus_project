@@ -5,17 +5,24 @@ using Microsoft.Extensions.Hosting;
 using VacationPlanner.Application;
 using VacationPlanner.Infrastructure;
 using VacationPlanner.Worker.Consumers;
+using VacationPlanner.Worker.HostedServices;
 
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Фоновая политика: авто-закрытие «зависших» черновиков (через StaleDraftService + State).
+builder.Services.AddHostedService<DraftCleanupHostedService>();
+
 var rabbit = builder.Configuration.GetSection("RabbitMq");
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<LeaveRequestSubmittedConsumer>();
     x.AddConsumer<LeaveRequestStatusChangedConsumer>();
+    // Аудит-консьюмеры на те же события (fan-out: каждый endpoint получает копию).
+    x.AddConsumer<LeaveSubmittedAuditConsumer>();
+    x.AddConsumer<LeaveStatusAuditConsumer>();
 
     x.UsingRabbitMq((ctx, cfg) =>
     {

@@ -16,7 +16,8 @@ public class LeaveService(
     ILeaveRepository leaveRepository,
     IUserRepository userRepository,
     IPublishEndpoint publishEndpoint,
-    VacationMetrics metrics)
+    VacationMetrics metrics,
+    IRealtimeNotifier realtime)
 {
     public async Task<LeaveRequestDto> SubmitAsync(CreateLeaveRequestRequest request, CancellationToken ct = default)
     {
@@ -48,7 +49,29 @@ public class LeaveService(
 
         metrics.LeavesSubmitted.Add(1);
 
-        return ToDto(leaveRequest, user.Name);
+        // Realtime: сообщаем подключённым SPA о новой заявке (best-effort).
+        var dto = ToDto(leaveRequest, user.Name);
+        try { await realtime.NotifyLeaveCreatedAsync(dto, ct); } catch { /* не должно ломать создание */ }
+
+        return dto;
+    }
+
+    /// <summary>Сохраняет черновик (статус Draft): ни событий, ни метрик, ни realtime.</summary>
+    public async Task<int> SaveDraftAsync(CreateLeaveRequestRequest request, CancellationToken ct = default)
+    {
+        var user = await userRepository.GetByIdAsync(request.UserId, ct)
+            ?? throw new InvalidOperationException($"Пользователь {request.UserId} не найден.");
+
+        var draft = new LeaveRequestBuilder()
+            .ForUser(request.UserId)
+            .OfType(request.Type)
+            .Between(request.StartDate, request.EndDate)
+            .Reason(request.Reason ?? "")
+            .Build(); // исходное состояние — Draft
+
+        await leaveRepository.AddAsync(draft, ct);
+        await leaveRepository.SaveAsync(ct);
+        return draft.Id;
     }
 
     public async Task UpdateStatusAsync(int id, LeaveStatus newStatus, int approverUserId, CancellationToken ct = default)
@@ -77,6 +100,9 @@ public class LeaveService(
             new LeaveRequestStatusChanged(
                 lr.Id, lr.UserId, newStatus, lr.StartDate, lr.EndDate),
             ct);
+
+        // Realtime: сообщаем подключённым SPA о смене статуса (best-effort).
+        try { await realtime.NotifyStatusChangedAsync(lr.Id, newStatus.ToString(), ct); } catch { /* best-effort */ }
     }
 
     public async Task<List<LeaveRequestDto>> GetAllAsync(CancellationToken ct = default)

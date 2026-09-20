@@ -42,6 +42,10 @@ export const api = {
   leaves: () => request('/api/leave'),
   createLeave: (userId, type, startDate, endDate, reason) =>
     request('/api/leave', { method: 'POST', body: { userId, type, startDate, endDate, reason } }),
+  saveDraft: (userId, type, startDate, endDate, reason) =>
+    request('/api/leave/draft', { method: 'POST', body: { userId, type, startDate, endDate, reason } }),
+  submitDraft: (id) => request(`/api/leave/${id}/submit`, { method: 'POST' }),
+  cancelLeave: (id) => request(`/api/leave/${id}/cancel`, { method: 'POST' }),
   approve: (id) => request(`/api/leave/${id}/approve`, { method: 'POST' }),
   decline: (id) => request(`/api/leave/${id}/decline`, { method: 'POST' }),
   balance: (userId, year) => request(`/api/balance/${userId}?year=${year}`)

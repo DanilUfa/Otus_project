@@ -56,6 +56,45 @@ public class LeaveService(
         return dto;
     }
 
+    /// <summary>Отправляет сохранённый черновик (Draft → Submitted) на согласование.</summary>
+    public async Task<LeaveRequestDto> SubmitDraftAsync(int id, int userId, CancellationToken ct = default)
+    {
+        var lr = await leaveRepository.GetByIdAsync(id, ct)
+            ?? throw new InvalidOperationException($"Заявка {id} не найдена.");
+        if (lr.UserId != userId)
+            throw new UnauthorizedAccessException("Отправить черновик может только его автор.");
+
+        // State: Draft → Submitted (нелегальные переходы запрещены).
+        LeaveState.For(lr.Status).EnsureCanTransitionTo(LeaveStatus.Submitted);
+
+        lr.Status = LeaveStatus.Submitted;
+        await leaveRepository.SaveAsync(ct);
+
+        await publishEndpoint.Publish(
+            new LeaveRequestSubmitted(lr.Id, lr.UserId, lr.Type, lr.StartDate, lr.EndDate, lr.CreatedAt),
+            ct);
+        metrics.LeavesSubmitted.Add(1);
+
+        var user = await userRepository.GetByIdAsync(lr.UserId, ct);
+        var dto = ToDto(lr, user?.Name ?? $"User {lr.UserId}");
+        try { await realtime.NotifyLeaveCreatedAsync(dto, ct); } catch { }
+
+        return dto;
+    }
+
+    /// <summary>Отменяет заявку её автором (Draft → Cancelled, Submitted → Cancelled).</summary>
+    public async Task CancelAsync(int id, int userId, CancellationToken ct = default)
+    {
+        var lr = await leaveRepository.GetByIdAsync(id, ct)
+            ?? throw new InvalidOperationException($"Заявка {id} не найдена.");
+        if (lr.UserId != userId)
+            throw new UnauthorizedAccessException("Отменить может только автор заявки.");
+
+        LeaveState.For(lr.Status).EnsureCanTransitionTo(LeaveStatus.Cancelled);
+        lr.Status = LeaveStatus.Cancelled;
+        await leaveRepository.SaveAsync(ct);
+    }
+
     /// <summary>Сохраняет черновик (статус Draft): ни событий, ни метрик, ни realtime.</summary>
     public async Task<int> SaveDraftAsync(CreateLeaveRequestRequest request, CancellationToken ct = default)
     {

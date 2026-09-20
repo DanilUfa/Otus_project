@@ -144,6 +144,16 @@ function SubmitForm({ userId, onDone }) {
     } catch (e) { setMsg('Ошибка: ' + e.message); }
   }
 
+  async function saveDraft(e) {
+    e.preventDefault();
+    setMsg('');
+    try {
+      await api.saveDraft(userId, Number(type), start, end, reason);
+      setMsg('Черновик сохранён — появится в списке со статусом «Черновик».');
+      onDone();
+    } catch (e) { setMsg('Ошибка: ' + e.message); }
+  }
+
   return (
     <form className="card grid" onSubmit={submit}>
       <label>Тип
@@ -154,8 +164,9 @@ function SubmitForm({ userId, onDone }) {
       <label>Начало <input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></label>
       <label>Конец <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></label>
       <label>Причина <input value={reason} onChange={(e) => setReason(e.target.value)} /></label>
-      <div>
+      <div className="row">
         <button>Подать</button>
+        <button className="ghost" type="button" onClick={saveDraft}>Сохранить черновик</button>
         {msg && <span className="ok">{msg}</span>}
       </div>
     </form>
@@ -171,7 +182,7 @@ function LeaveTable({ leaves, myUserId, isManager, onAction }) {
 
   return (
     <table>
-      <thead><tr><th>#</th><th>Сотрудник</th><th>Тип</th><th>Период</th><th>Дней</th><th>Статус</th>{isManager && <th></th>}</tr></thead>
+      <thead><tr><th>#</th><th>Сотрудник</th><th>Тип</th><th>Период</th><th>Дней</th><th>Статус</th><th></th></tr></thead>
       <tbody>
         {shown.map((l) => (
           <tr key={l.id}>
@@ -185,6 +196,12 @@ function LeaveTable({ leaves, myUserId, isManager, onAction }) {
               <td className="actions">
                 <button onClick={() => api.approve(l.id).then(onAction)}>Утвердить</button>
                 <button className="warn" onClick={() => api.decline(l.id).then(onAction)}>Отклонить</button>
+              </td>
+            )}
+            {(!isManager && myUserId === l.userId && l.status === 0) && (
+              <td className="actions">
+                <button onClick={() => api.submitDraft(l.id).then(onAction)}>Отправить</button>
+                <button className="warn" onClick={() => api.cancelLeave(l.id).then(onAction)}>Отменить</button>
               </td>
             )}
           </tr>

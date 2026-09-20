@@ -156,6 +156,18 @@ api.MapPost("/leave/draft", async (CreateLeaveRequestRequest request, LeaveServi
    .WithName("SaveLeaveDraft")
    ;
 
+api.MapPost("/leave/{id:int}/submit", async (int id, LeaveService service, ClaimsPrincipal user, CancellationToken ct)
+        => Results.Ok(await service.SubmitDraftAsync(id, GetUserId(user), ct)))
+   .RequireAuthorization("AuthenticatedOnly")
+   .WithName("SubmitLeaveDraft")
+   ;
+
+api.MapPost("/leave/{id:int}/cancel", async (int id, LeaveService service, ClaimsPrincipal user, CancellationToken ct)
+        => { await service.CancelAsync(id, GetUserId(user), ct); return Results.NoContent(); })
+   .RequireAuthorization("AuthenticatedOnly")
+   .WithName("CancelLeaveRequest")
+   ;
+
 api.MapPost("/leave/{id:int}/approve", async (int id, LeaveService service, ClaimsPrincipal user, CancellationToken ct)
         => {
             var approverId = GetUserId(user);

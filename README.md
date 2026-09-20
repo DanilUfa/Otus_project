@@ -1,6 +1,6 @@
 # Планирование отпусков — черновой вариант (MVP)
 
-C# / .NET 10 · ASP.NET Core Minimal API · PostgreSQL · EF Core · MassTransit (RabbitMQ) · Redis (зарезервирован) · Swagger (Swashbuckle).
+C# / .NET 10 · ASP.NET Core Minimal API · PostgreSQL · EF Core · MassTransit (RabbitMQ) · Redis (кэш) · Swagger (Swashbuckle).
 
 ## Шаблоны проектирования (что реализовано в коде)
 
@@ -27,7 +27,7 @@ C# / .NET 10 · ASP.NET Core Minimal API · PostgreSQL · EF Core · MassTransit
 - `SemaphoreSlim` (`BalanceGate.LockAsync`) — **примитив синхронизации** (асинхронный замок на пользователя, защищает пересчёт баланса от гонок).
 - **Repository + DI** — изоляция доступа к данным за интерфейсами (`ILeaveRepository`, `IUserRepository`).
 
-> Честная заметка для защиты: `Decorator`/`Memento`, Redis-кэш, Keycloak — в **роадмапе** (см. `ARCHITECTURE.md`), в этом MVP не реализованы.
+> Честная заметка для защиты: `Decorator`/`Memento`, Keycloak, Kafka — в **роадмапе** (см. `ARCHITECTURE.md`), в этом MVP не реализованы.
 
 ## Быстрый запуск одной командой (Docker)
 
@@ -143,7 +143,12 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/users
   → заявка получает статус `Submitted`, публикуется событие, Worker шлёт уведомление руководителю на email
 - `POST /api/leave/{id}/approve` — утвердить (**роль Manager**, и только руководитель сотрудника)
 - `POST /api/leave/{id}/decline` — отклонить (**роль Manager**)
-- `GET /api/balance/{userId}?year=2026` — остаток дней годового отпуска (auth)
+- `POST /api/leave/draft` — сохранить черновик (статус `Draft`, без уведомлений)
+- `POST /api/leave/{id}/submit` — отправить черновик на согласование (`Draft → Submitted`, автор)
+- `POST /api/leave/{id}/cancel` — отменить черновик/поданную заявку (`→ Cancelled`, автор)
+- `GET /api/balance/{userId}?year=2026` — остаток дней годового отпуска (auth, кэш Redis TTL 60с)
+- `GET /health/live` — liveness
+- `GET /health/ready` — readiness (БД + RabbitMQ + Redis)
 
 Пример подачи заявки сотрудником:
 ```bash
@@ -216,10 +221,13 @@ src/
 
 ## Что дальше (план доработок)
 
-- [ ] React SPA (раздаётся API), годовой календарь-график отпусков
-- [ ] Реальный пересчёт баланса в Worker + примитивы синхронизации (SemaphoreSlim)
-- [ ] Паттерн State (жизненный цикл заявки), Decorator (аудит)
-- [ ] Redis-кэш баланса
+- [x] React SPA (раздаётся API), годовой календарь-график отпусков
+- [x] Реальный пересчёт баланса в Worker + примитивы синхронизации (SemaphoreSlim)
+- [x] Паттерн State (жизненный цикл заявки), черновик → отправка → отмена
+- [x] Redis-кэш баланса и списка пользователей
+- [x] Health-эндпоинты (`/health/live`, `/health/ready`)
+- [x] Realtime (SignalR): SPA обновляется при новой заявке/смене статуса
+- [x] Аудит-консьюмер (fan-out по той же шине) + авто-закрытие «зависших» черновиков
+- [ ] Decorator (аудит через перехват уведомлений)
 - [ ] Keycloak (OIDC) вместо встроенного JWT (сейчас — локальный JWT с ролями)
 - [ ] Kafka как второй транспорт MassTransit
-- [ ] Prometheus/Grafana метрики, миграции EF Core вместо `EnsureCreated`

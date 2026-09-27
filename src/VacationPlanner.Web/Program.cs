@@ -27,6 +27,9 @@ using User = VacationPlanner.Domain.Entities.User;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// --- SPA static root: wwwroot каталога проекта Web (детерминированно, независимо от рабочего каталога запуска) ---
+builder.WebHost.UseWebRoot(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "wwwroot"));
+
 // --- Swagger (Swashbuckle) ---
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -101,6 +104,10 @@ using (var scope = app.Services.CreateScope())
 
 app.UseSwagger();
 app.UseSwaggerUI();
+
+// SPA (wwwroot): раздача статики + index.html по умолчанию.
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -212,27 +219,23 @@ app.Run();
 static int GetUserId(ClaimsPrincipal user)
     => int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException());
 
-// Тестовые данные для черновика.
+// Тестовые данные для черновика. Идиопотентно: пользователи добавляются, если отсутствуют.
 static void Seed(AppDbContext db, IPasswordHasher hasher)
 {
-    if (db.Users.Any()) return;
+    var byEmail = db.Users.ToDictionary(u => u.Email);
 
-    var manager = new User
+    User Ensure(string email, string password, string name, UserRole role, User? manager = null)
     {
-        Name = "Иван Менеджер",
-        Email = "manager@vac.local",
-        Role = UserRole.Manager,
-        PasswordHash = hasher.Hash("Manager123!")
-    };
-    var employee = new User
-    {
-        Name = "Пётр Сотрудник",
-        Email = "petr@vac.local",
-        Role = UserRole.Employee,
-        Manager = manager,
-        PasswordHash = hasher.Hash("User123!")
-    };
+        if (byEmail.TryGetValue(email, out var existing)) return existing;
+        var u = new User { Name = name, Email = email, Role = role, PasswordHash = hasher.Hash(password), Manager = manager };
+        db.Users.Add(u);
+        return u;
+    }
 
-    db.Users.AddRange(manager, employee);
+    var manager = Ensure("manager@vac.local", "Manager123!", "Иван Менеджер", UserRole.Manager);
+    // Сотрудники для демо «графика отдела» / пересечений.
+    Ensure("petr@vac.local", "User123!", "Пётр Сотрудник", UserRole.Employee, manager);
+    Ensure("maria@vac.local", "User123!", "Мария Бухгалтер", UserRole.Employee, manager);
+    Ensure("alex@vac.local", "User123!", "Алексей Инженер", UserRole.Employee, manager);
     db.SaveChanges();
 }

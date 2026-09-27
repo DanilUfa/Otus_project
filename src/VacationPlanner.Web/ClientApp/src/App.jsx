@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { HubConnectionBuilder } from '@microsoft/signalr';
 import { api, TYPE_LABELS, TYPE_VALUES, STATUS_LABELS } from './api';
+import DayCalendar from './DayCalendar';
 
 const MONTHS = [
   'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
@@ -80,6 +81,8 @@ export default function App() {
         </section>
 
         <YearCalendar />
+
+        <DayCalendar />
       </main>
     </div>
   );

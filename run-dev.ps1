@@ -29,12 +29,19 @@ function Wait-Port([int]$port, [int]$timeoutSec = 90) {
   return $false
 }
 
-function Wait-Log([string]$file, [string]$text, [int]$timeoutSec = 150) {
+function Wait-Log([string]$file, [string]$text, [int]$timeoutSec = 120) {
   $deadline = (Get-Date).AddSeconds($timeoutSec)
   while ((Get-Date) -lt $deadline) {
     if (Test-Path $file) {
-      $m = Select-String -Path $file -Pattern $text -Quiet -ErrorAction SilentlyContinue
-      if ($m) { return $true }
+      try {
+        $fs = [System.IO.File]::Open($file, 'Open', 'Read', 'ReadWrite')
+        try {
+          $sr = New-Object System.IO.StreamReader($fs, [System.Text.Encoding]::UTF8)
+          $content = $sr.ReadToEnd()
+          $sr.Dispose()
+          if ($content -like "*${text}*") { return $true }
+        } finally { $fs.Dispose() }
+      } catch {}
     }
     Start-Sleep 2
   }
@@ -43,7 +50,7 @@ function Wait-Log([string]$file, [string]$text, [int]$timeoutSec = 150) {
 
 if (-not $SkipInfra) {
   Write-Host "[1/4] infra (postgres/redis/rabbitmq/prometheus/grafana)..."
-  docker compose up -d postgres redis rabbitmq prometheus grafana mailpit *>&1 | Tee-Object "$root\logs\infra.log"
+  docker compose up -d --no-build postgres redis rabbitmq prometheus grafana mailpit *>&1 | Tee-Object "$root\logs\infra.log"
   Write-Host "  waiting infra ports (postgres 5432, rabbit 5672, redis 6379)..."
   Wait-Port 5432 | Out-Null
   Wait-Port 5672 | Out-Null
@@ -63,10 +70,12 @@ if (-not (Test-Path "$root\logs\migrations.ok")) {
 }
 
 Write-Host "[4/5] start Web -> logs\web.log, logs\web.err.log"
-$web = Start-Process dotnet -ArgumentList @("run","--project","src/VacationPlanner.Web") `
+$web = Start-Process dotnet -ArgumentList @("run","--project","$root/src/VacationPlanner.Web") `
+       -WorkingDirectory "$root/src/VacationPlanner.Web" `
        -RedirectStandardOutput "$root\logs\web.log" -RedirectStandardError "$root\logs\web.err.log" -PassThru -WindowStyle Hidden
 Write-Host "[5/5] start Worker -> logs\worker.log, logs\worker.err.log"
-$wrk = Start-Process dotnet -ArgumentList @("run","--project","src/VacationPlanner.Worker") `
+$wrk = Start-Process dotnet -ArgumentList @("run","--project","$root/src/VacationPlanner.Worker") `
+       -WorkingDirectory "$root/src/VacationPlanner.Worker" `
        -RedirectStandardOutput "$root\logs\worker.log" -RedirectStandardError "$root\logs\worker.err.log" -PassThru -WindowStyle Hidden
 
 "$($web.Id)" | Out-File "$root\logs\web.pid"

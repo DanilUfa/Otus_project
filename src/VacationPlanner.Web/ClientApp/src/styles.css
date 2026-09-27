@@ -53,3 +53,23 @@ table.cal th:not(:first-child), table.cal td:not(:first-child) { text-align: cen
 .error { color: var(--warn); font-size: 14px; }
 .ok { color: var(--ok); font-size: 14px; }
 .dim { color: var(--muted); font-size: 14px; }
+
+/* --- График отдела --- */
+.dept-cal .legend { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; margin-bottom: 14px; font-size: 14px; }
+.dept-cal .legend label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.cal-overlap { color: #fff; font-weight: 700; }
+.overlaps { margin-top: 16px; padding: 14px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; }
+.overlaps ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; line-height: 1.7; }
+.ov-date { font-weight: 600; color: var(--warn); }
+
+/* --- Календарь отдела по дням --- */
+.day-scroll { overflow-x: auto; margin-top: 4px; }
+table.cal.day th:first-child, table.cal.day td:first-child { width: 150px; text-align: left; }
+table.cal.day th:not(:first-child), table.cal.day td:not(:first-child) { width: auto; min-width: 20px; padding: 4px 2px; text-align: center; font-size: 11px; }
+.d-name { font-weight: 600; font-size: 13px; }
+.d-off { background: transparent; }
+.d-weh { color: var(--muted); }
+.d-off.d-we { background: #f6f8fb; }
+.d-on.d-a { background: #93c5fd; }
+.d-on.d-b { background: #86efac; }
+.d-over { background: #fb7185; color: #fff; }

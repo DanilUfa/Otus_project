@@ -21,7 +21,8 @@ builder.Services.AddMassTransit(x =>
             h.Username(rabbit["Username"] ?? "vac");
             h.Password(rabbit["Password"] ?? "vac");
         });
-        cfg.ConfigureEndpoints(ctx);
+        cfg.ReceiveEndpoint("notifier-leave-submitted", e => e.ConfigureConsumer<LeaveRequestSubmittedConsumer>(ctx));
+        cfg.ReceiveEndpoint("notifier-leave-status-changed", e => e.ConfigureConsumer<LeaveRequestStatusChangedConsumer>(ctx));
     });
 });
 

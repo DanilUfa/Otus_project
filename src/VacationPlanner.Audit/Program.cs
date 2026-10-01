@@ -49,7 +49,8 @@ builder.Services.AddMassTransit(x =>
             h.Username(rabbit["Username"] ?? "vac");
             h.Password(rabbit["Password"] ?? "vac");
         });
-        cfg.ConfigureEndpoints(ctx);
+        cfg.ReceiveEndpoint("audit-leave-submitted", e => e.ConfigureConsumer<LeaveSubmittedAuditConsumer>(ctx));
+        cfg.ReceiveEndpoint("audit-leave-status-changed", e => e.ConfigureConsumer<LeaveStatusAuditConsumer>(ctx));
     });
 });
 

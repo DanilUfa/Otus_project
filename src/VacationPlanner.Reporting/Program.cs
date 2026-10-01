@@ -46,7 +46,10 @@ builder.Services.AddMassTransit(x =>
             h.Username(rabbit["Username"] ?? "vac");
             h.Password(rabbit["Password"] ?? "vac");
         });
-        cfg.ConfigureEndpoints(ctx);
+        // Явные имена очередей: у notifier такие же консьюмеры, иначе MassTransit
+        // дал бы ОДНУ очередь на всех (конкурентное потребление = потеря событий).
+        cfg.ReceiveEndpoint("reporting-leave-submitted", e => e.ConfigureConsumer<LeaveRequestSubmittedConsumer>(ctx));
+        cfg.ReceiveEndpoint("reporting-leave-status-changed", e => e.ConfigureConsumer<LeaveRequestStatusChangedConsumer>(ctx));
     });
 });
 

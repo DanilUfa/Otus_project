@@ -93,6 +93,13 @@ public class LeaveService(
         LeaveState.For(lr.Status).EnsureCanTransitionTo(LeaveStatus.Cancelled);
         lr.Status = LeaveStatus.Cancelled;
         await leaveRepository.SaveAsync(ct);
+
+        // Отмена — тоже изменение статуса: уведомляем шину (reporting уберёт строку
+        // из read-модели, audit запишет историю) и realtime-подписчиков.
+        await publishEndpoint.Publish(
+            new LeaveRequestStatusChanged(lr.Id, lr.UserId, LeaveStatus.Cancelled, lr.StartDate, lr.EndDate),
+            ct);
+        try { await realtime.NotifyStatusChangedAsync(lr.Id, LeaveStatus.Cancelled.ToString(), ct); } catch { }
     }
 
     /// <summary>Сохраняет черновик (статус Draft): ни событий, ни метрик, ни realtime.</summary>

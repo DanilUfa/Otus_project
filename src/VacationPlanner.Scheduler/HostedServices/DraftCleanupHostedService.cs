@@ -1,6 +1,6 @@
 using VacationPlanner.Application.Services;
 
-namespace VacationPlanner.Worker.HostedServices;
+namespace VacationPlanner.Scheduler.HostedServices;
 
 public sealed class DraftCleanupOptions
 {
@@ -9,8 +9,8 @@ public sealed class DraftCleanupOptions
 }
 
 /// <summary>
-/// Периодическая фоновая задача: закрывает «зависшие» черновики (Draft → Cancelled)
-/// через <see cref="StaleDraftService"/> (State-переходы).
+/// Микросервис <b>scheduler</b>: периодически закрывает «зависшие» черновики
+/// (Draft → Cancelled) через <see cref="StaleDraftService"/> (State-переходы).
 /// </summary>
 public sealed class DraftCleanupHostedService(
     ILogger<DraftCleanupHostedService> logger,

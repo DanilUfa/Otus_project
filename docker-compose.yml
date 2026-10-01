@@ -1,6 +1,7 @@
 # Запуск одной командой:
 #   docker compose up -d --build
-# Проверка: http://localhost:5000/swagger  (API), http://localhost:15672 (RabbitMQ, vac/vac)
+# Точка входа: http://localhost:5000 (API Gateway). Swagger каждого сервиса:
+#   api :5000/swagger · reporting :5200/swagger · audit :5300/swagger
 
 name: vacation
 
@@ -19,6 +20,7 @@ services:
       POSTGRES_DB: vacation
     ports: ["5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vac -d vacation"]
       interval: 5s
@@ -29,6 +31,7 @@ services:
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -42,6 +45,7 @@ services:
       RABBITMQ_DEFAULT_USER: vac
       RABBITMQ_DEFAULT_PASS: vac
     ports: ["5672:5672", "15672:15672"]
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
@@ -49,10 +53,17 @@ services:
       retries: 15
     networks: [vacnet]
 
+  # =====================================================================
+  # Микросервисы приложения (слабо связаны через RabbitMQ).
+  # Все публичные запросы идут через API Gateway на :5000.
+  # =====================================================================
+
+  # write-сторона: auth, жизненный цикл заявок, баланс, SignalR, SPA-статика
   api:
     build: { context: ., dockerfile: src/VacationPlanner.Web/Dockerfile }
     environment:
       ASPNETCORE_URLS: http://+:80
+      ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__Default: Host=postgres;Port=5432;Database=vacation;Username=vac;Password=vac
       RabbitMq__Host: rabbitmq
       RabbitMq__Username: vac
@@ -60,45 +71,134 @@ services:
       Jwt__Key: dev-only-secret-key-change-me-0123456789-0123456789
       Jwt__Issuer: VacationPlanner
       Jwt__Audience: VacationPlannerApi
-      # SMTP для уведомлений руководителю (например, П/годно по Outlook/Office365):
-      # Notifications__Email__Host: smtp.office365.com
-      # Notifications__Email__Port: 587
-      # Notifications__Email__Username: ...
-      # Notifications__Email__Password: ...
-      # Notifications__Email__From: ...
-    ports: ["5000:80"]
+      Redis__Host: redis
+    ports: ["5100:80"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
     depends_on:
       postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
       redis:    { condition: service_healthy }
     networks: [vacnet]
 
-  worker:
-    build: { context: ., dockerfile: src/VacationPlanner.Worker/Dockerfile }
+  # email-уведомления (руководителю / сотруднику)
+  notifier:
+    build: { context: ., dockerfile: src/VacationPlanner.Notifier/Dockerfile }
     environment:
       ConnectionStrings__Default: Host=postgres;Port=5432;Database=vacation;Username=vac;Password=vac
       RabbitMq__Host: rabbitmq
       RabbitMq__Username: vac
       RabbitMq__Password: vac
-      # SMTP для уведомлений руководителю:
-      # Notifications__Email__Host: smtp.office365.com
-      # Notifications__Email__Port: 587
-      # Notifications__Email__Username: ...
-      # Notifications__Email__Password: ...
-      # Notifications__Email__From: ...
+      Notifications__Email__Host: mailpit
+      Notifications__Email__Port: "1025"
+      Notifications__Email__Username: ""
+      Notifications__Email__Password: ""
+      Notifications__Email__From: vacation@vac.local
+    restart: unless-stopped
     depends_on:
       postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     networks: [vacnet]
 
+  # периодическая чистота: закрытие «зависших» черновиков
+  scheduler:
+    build: { context: ., dockerfile: src/VacationPlanner.Scheduler/Dockerfile }
+    environment:
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=vacation;Username=vac;Password=vac
+      DraftCleanup__IntervalSeconds: "20"
+      DraftCleanup__StaleDays: "3"
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [vacnet]
+
+  # аудит: свои таблица + API истории операций
+  audit:
+    build: { context: ., dockerfile: src/VacationPlanner.Audit/Dockerfile }
+    environment:
+      ASPNETCORE_URLS: http://+:80
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=vacation;Username=vac;Password=vac
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: vac
+      RabbitMq__Password: vac
+      Jwt__Key: dev-only-secret-key-change-me-0123456789-0123456789
+      Jwt__Issuer: VacationPlanner
+      Jwt__Audience: VacationPlannerApi
+    ports: ["5300:80"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [vacnet]
+
+  # reporting (CQRS read-сторона): read-модель + годовой календарь
+  reporting:
+    build: { context: ., dockerfile: src/VacationPlanner.Reporting/Dockerfile }
+    environment:
+      ASPNETCORE_URLS: http://+:80
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=vacation;Username=vac;Password=vac
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: vac
+      RabbitMq__Password: vac
+      Jwt__Key: dev-only-secret-key-change-me-0123456789-0123456789
+      Jwt__Issuer: VacationPlanner
+      Jwt__Audience: VacationPlannerApi
+    ports: ["5200:80"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [vacnet]
+
+  # API Gateway: единая точка входа + маршрутизация + health зависимостей
+  gateway:
+    build: { context: ., dockerfile: src/VacationPlanner.Gateway/Dockerfile }
+    environment:
+      ASPNETCORE_URLS: http://+:80
+      ASPNETCORE_ENVIRONMENT: Production
+      Upstreams__Api: http://api
+      Upstreams__Reporting: http://reporting
+      Upstreams__Audit: http://audit
+    ports: ["5000:80"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    depends_on:
+      api:       { condition: service_healthy }
+      reporting: { condition: service_healthy }
+      audit:     { condition: service_healthy }
+    networks: [vacnet]
+
   # ---------- Мониторинг: Prometheus + Grafana ----------
   prometheus:
     image: prom/prometheus:latest
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
+    command: [--config.file=/etc/prometheus/prometheus.yml]
     volumes: [./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro]
     ports: ["9090:9090"]
-    # API запущен на хосте (host.docker.internal:5000) — из-за CA-проблемы в Docker-сборке.
+    restart: unless-stopped
     extra_hosts: ["host.docker.internal:host-gateway"]
     networks: [vacnet]
 
@@ -112,12 +212,13 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports: ["3000:3000"]
+    restart: unless-stopped
     depends_on: [prometheus]
     networks: [vacnet]
 
   # ---------- Почтовый «ловец» уведомлений ----------
-  # SMTP :1025, веб-морда :8025 (все письма, отправленные приложением, видны в UI).
   mailpit:
     image: axllent/mailpit:latest
     ports: ["1025:1025", "8025:8025"]
+    restart: unless-stopped
     networks: [vacnet]

@@ -40,6 +40,11 @@ export default function App() {
       sessionStorage.setItem('leaves', JSON.stringify(leaves));
       sessionStorage.setItem('users', JSON.stringify(users));
       sessionStorage.setItem('balance', JSON.stringify(balance));
+      // Read-модель (CQRS): календарь отдела берём из микросервиса reporting; best-effort.
+      try {
+        const rep = await api.reportCalendar(YEAR);
+        sessionStorage.setItem('report', JSON.stringify(rep));
+      } catch { sessionStorage.removeItem('report'); }
       force(x => x + 1);
     } catch (e) { setError(String(e.message)); }
   }
@@ -55,7 +60,7 @@ export default function App() {
         <div className="who">
           <b className={'role-' + user.role}>{user.name}</b>
           <span className="tag">{user.role === 'Manager' ? 'Руководитель' : 'Сотрудник'}</span>
-          <button className="ghost" onClick={() => { setUser(null); localStorage.clear(); }}>Выйти</button>
+          <button className="ghost" onClick={() => { setUser(null); localStorage.clear(); sessionStorage.clear(); }}>Выйти</button>
         </div>
       </header>
 

@@ -48,5 +48,9 @@ export const api = {
   cancelLeave: (id) => request(`/api/leave/${id}/cancel`, { method: 'POST' }),
   approve: (id) => request(`/api/leave/${id}/approve`, { method: 'POST' }),
   decline: (id) => request(`/api/leave/${id}/decline`, { method: 'POST' }),
-  balance: (userId, year) => request(`/api/balance/${userId}?year=${year}`)
+  balance: (userId, year) => request(`/api/balance/${userId}?year=${year}`),
+  // Read-модель (CQRS): календарь отдела из микросервиса reporting
+  reportCalendar: (year) => request(`/api/reports/calendar?year=${year}`),
+  // История операций из микросервиса audit
+  audit: (requestId) => request(`/api/audit${requestId ? `?requestId=${requestId}` : ''}`)
 };

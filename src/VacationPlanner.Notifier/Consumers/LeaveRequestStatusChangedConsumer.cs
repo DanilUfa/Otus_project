@@ -4,12 +4,10 @@ using VacationPlanner.Application.Contracts;
 using VacationPlanner.Domain;
 using VacationPlanner.Domain.Events;
 
-namespace VacationPlanner.Worker.Consumers;
+namespace VacationPlanner.Notifier.Consumers;
 
 /// <summary>
-/// Обрабатывает событие «статус заявки изменён» (утверждена/отклонена):
-/// уведомляет сотрудника по email. Best-effort: ошибка роняет только обработку сообщения.
-/// (Observer/Mediator через MassTransit.)
+/// Микросервис <b>notifier</b>: уведомляет сотрудника об утверждении/отклонении заявки.
 /// </summary>
 public class LeaveRequestStatusChangedConsumer(
     IUserRepository userRepository,

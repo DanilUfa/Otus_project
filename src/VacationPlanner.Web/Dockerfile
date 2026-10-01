@@ -13,6 +13,7 @@ RUN dotnet publish src/VacationPlanner.Web -c Release -o /app/out
 # ===================== Stage 3: runtime =====================
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/out .
 # Накладываем собранный React SPA поверх wwwroot (заменяет placeholder index.html)
 COPY --from=ui /app/wwwroot ./wwwroot

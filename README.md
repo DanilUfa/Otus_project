@@ -11,17 +11,17 @@ C# / .NET 10 · ASP.NET Core Minimal API · PostgreSQL · EF Core · MassTransit
 |---|---------|--------|-----------|----------|
 | 1 | **Factory Method** | создание | `Application/Patterns/LeaveRequestFactory.cs` | единая точка создания `LeaveRequest` (тип/даты/статус), скрывает инициализацию |
 | 2 | **Builder** | создание | `Application/Patterns/LeaveRequestBuilder.cs` | пошаговое построение заявки (`ForUser().OfType().Between().Reason().Build()`), читаемо и валидируется |
-| 3 | **Observer** | поведение | доменные события `Events/*` + `Worker/Consumers/*` | подписчики узнают о событиях без прямой связи с источником |
-| 4 | **Mediator** | поведение | **MassTransit/RabbitMQ** (`LeaveRequestSubmitted`, `LeaveRequestStatusChanged`) | вынесение взаимодействия между компонентами за шину: API публикует, Worker слушает |
+| 3 | **Observer** | поведение | доменные события `Events/*` + `Consumers/*` в notifier/audit/reporting | подписчики узнают о событиях без прямой связи с источником |
+| 4 | **Mediator** | поведение | **MassTransit/RabbitMQ** (`LeaveRequestSubmitted`, `LeaveRequestStatusChanged`) | вынесение взаимодействия за шину: api публикует, notifier/audit/reporting слушают |
 | 5 | **Adapter** | структура | `EmailNotificationSender` (MailKit ↔ `INotificationSender`); `LeaveRepository/UserRepository` (EF Core ↔ `ILeaveRepository/IUserRepository`) | сведение сторонней библиотеки/ORM к нашим интерфейсам |
 | 6 | **Singleton** | создание | `BalanceGate`, `VacationMetrics` — регистрации `AddSingleton` в DI | одно общее состояние (per-user async-замок; счётчики метрик) |
 | 7 | **State** | поведение | `Application/Patterns/LeaveState.cs` + use в `LeaveService` | жизненный цикл заявки: объекты-состояния запрещают нелегальные переходы (например, нельзя утвердить уже отклонённую) |
 
 ### Как объяснить **Observer + Mediator** на защите
 - **Издатель** (API в `LeaveService`) после сохранения заявки вызывает `IPublishEndpoint.Publish(...)`.
-- **Подписчики** (Worker: `LeaveRequestSubmittedConsumer`, `LeaveRequestStatusChangedConsumer`) сами не знают про издателя — регистрируются в `AddMassTransit`.
+- **Подписчики** (notifier/audit/reporting: `*Consumer`) сами не знают про издателя — регистрируются в `AddMassTransit` в каждом сервисе.
 - Транспорт (RabbitMQ) — это и есть медиатор: продюсер и консьюмер связаны только контрактом сообщения, а не кодом.
-- Проверка «вживую»: подаём заявку → в `logs/worker.log` видим пересчёт баланса и отправку письма; событие ловится консьюмером, хотя API «не знает» о Worker.
+- Проверка «вживую»: подаём заявку → событие ловится консьюмерами, хотя api «не знает» о них (в логи смотри: `notifier.log` — письмо, `audit.log` — строка AUDIT, `reporting.log` — строка READMODEL).
 
 ### Дополнительно (усиливает аргумент, но не считается основным)
 - `SemaphoreSlim` (`BalanceGate.LockAsync`) — **примитив синхронизации** (асинхронный замок на пользователя, защищает пересчёт баланса от гонок).
@@ -72,7 +72,7 @@ docker compose up -d postgres redis rabbitmq
 dotnet restore
 dotnet build VacationPlanner.sln
 dotnet run --project src/VacationPlanner.Web      # http://localhost:5000/swagger
-dotnet run --project src/VacationPlanner.Worker   # отдельное окно
+'dotnet run' для каждого сервиса (или проще — .\run-dev.ps1, который стартует все 6)
 ```
 
 ## Мониторинг: Prometheus + Grafana
@@ -98,10 +98,10 @@ docker compose up -d prometheus grafana
 
 Для разработки письма шлются в **Mailpit** — локальный SMTP-«ловец» (без реального ящика и паролей приложения). Поднимается вместе с инфрой (`docker compose up -d mailpit`).
 
-- SMTP: `localhost:1025` (без TLS/авторизации) — так и настроено в `src/VacationPlanner.Worker/appsettings.json`.
+- SMTP: `localhost:1025` (без TLS/авторизации) — так настроено в `src/VacationPlanner.Notifier/appsettings.json` (влияет на письма).
 - Веб-морда: http://localhost:8025 — все отправленные уведомления видны тут.
 
-Worker шлёт руководителю («новая заявка») и сотруднику («утверждена/отклонена»). В логе `logs/worker.log` появится `Уведомление отправлено на ...`.
+notifier шлёт руководителю («новая заявка») и сотруднику («утверждена/отклонена»). В логе `logs/notifier.log` появится `Уведомление отправлено на ...`.
 
 Для реального почтовика (Outlook/Office365): задайте `Notifications__Email__Host=smtp.office365.com`, `Port=587`, `StartTls=true`, `Username`/`Password` и `From` (адрес ящика).
 
@@ -140,7 +140,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/users
 - `GET /api/users` — список сотрудников (auth)
 - `GET /api/leave` — все заявки (auth)
 - `POST /api/leave` — подать заявку: `{ userId, type, startDate, endDate, reason }` (auth)
-  → заявка получает статус `Submitted`, публикуется событие, Worker шлёт уведомление руководителю на email
+  → заявка получает статус `Submitted`, публикуется событие, notifier шлёт уведомление руководителю на email
 - `POST /api/leave/{id}/approve` — утвердить (**роль Manager**, и только руководитель сотрудника)
 - `POST /api/leave/{id}/decline` — отклонить (**роль Manager**)
 - `POST /api/leave/draft` — сохранить черновик (статус `Draft`, без уведомлений)
@@ -160,13 +160,13 @@ curl -X POST http://localhost:5000/api/leave \
 `type`: 0 = Annual, 1 = Sick, 2 = Unpaid.
 
 ### Поток согласования
-1. Сотрудник подаёт заявку → статус `Submitted`, Worker уведомляет руководителя.
+1. Сотрудник подаёт заявку → статус `Submitted`, notifier уведомляет руководителя.
 2. Руководитель подтверждает ролью Manager и вызывает `/approve` или `/decline`
    (проверка: утверждающим может быть только непосредственный руководитель сотрудника).
 3. Статус меняется на `Approved`/`Declined`; `GET /api/balance` учитывает только утверждённый годовой отпуск.
 
 ### Уведомление на Outlook
-При подаче заявки Worker отправляет руководителю email (SMTP/Outlook через MailKit). Для работы пропишите SMTP в `Notifications:Email` (в compose-переменных выше). Если SMTP не задан — уведомление пропускается с логом (приложение не падает).
+При подаче заявки notifier отправляет руководителю email (SMTP/Outlook через MailKit). Для работы пропишите SMTP в `Notifications:Email` (в compose-переменных выше). Если SMTP не задан — уведомление пропускается с логом (приложение не падает).
 
 ### Смоук-тест (весь поток)
 ```bash
@@ -195,9 +195,9 @@ curl -s -X POST $BASE/api/leave/1/approve -H "Authorization: Bearer $MGR"
 # 5) Остаток дней сотрудника (годовой)
 curl -s "$BASE/api/balance/2?year=2026" -H "Authorization: Bearer $EMP"
 ```
-Worker в логах покажет пересчёт `остаток ... = N дн.` и, при настроенном SMTP, отправку письма руководителю.
+В логах: `notifier.log` — отправка письма руководителю; `audit.log` — строка `AUDIT`; `reporting.log` — строка `READMODEL` (read-модель); баланс пересчитывается в api при запросе и кэшируется в Redis.
 
-## Локальная разработка (без Docker для API/Worker)
+## Локальная разработка (без Docker для сервисов)
 
 Поднять инфраструктуру, потом запускать из IDE:
 
@@ -205,7 +205,7 @@ Worker в логах покажет пересчёт `остаток ... = N д�
 docker compose up -d postgres redis rabbitmq
 dotnet restore
 dotnet run --project src/VacationPlanner.Web      # http://localhost:5000
-dotnet run --project src/VacationPlanner.Worker
+.\run-dev.ps1   # соберёт решение и запустит все 6 микросервисов
 ```
 
 ## Структура
@@ -216,13 +216,17 @@ src/
 ├─ VacationPlanner.Application/   # DTO, репозитории-инт., Factory+Builder, сервисы
 ├─ VacationPlanner.Infrastructure/ # AppDbContext (PostgreSQL), репозитории, DI
 ├─ VacationPlanner.Web/           # Minimal API + Swagger + MassTransit (publish)
-└─ VacationPlanner.Worker/        # консьюмер события MassTransit
+├─ VacationPlanner.Notifier/    # письма (консьюмеры событий)
+├─ VacationPlanner.Scheduler/  # фоновая чистка черновиков
+├─ VacationPlanner.Audit/      # аудит-история (AuditLogs, /api/audit)
+├─ VacationPlanner.Reporting/  # CQRS read-модель (/api/reports/calendar)
+└─ VacationPlanner.Gateway/    # API Gateway :5000 (реверс-прокси)
 ```
 
 ## Что дальше (план доработок)
 
 - [x] React SPA (раздаётся API), годовой календарь-график отпусков
-- [x] Реальный пересчёт баланса в Worker + примитивы синхронизации (SemaphoreSlim)
+- [x] Распределённая обработка событий: notifier (письма), audit (история), reporting (CQRS read-модель)
 - [x] Паттерн State (жизненный цикл заявки), черновик → отправка → отмена
 - [x] Redis-кэш баланса и списка пользователей
 - [x] Health-эндпоинты (`/health/live`, `/health/ready`)

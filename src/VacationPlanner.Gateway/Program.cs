@@ -2,7 +2,10 @@ using System.Net.WebSockets;
 using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.ClearProviders(); // без EventLog: в docker его нет, а на Windows без прав он рвёт соединения
+builder.Logging.AddConsole();
 var app = builder.Build();
+app.UseRouting();
 
 // Единая точка входа (API Gateway). Маршрутизация по префиксам.
 var api      = builder.Configuration["Upstreams:Api"]      ?? "http://127.0.0.1:5100";
@@ -15,8 +18,8 @@ static string PathAndQuery(HttpContext ctx)
 Uri Upstream(HttpContext ctx)
 {
     var p = ctx.Request.Path.Value ?? "/";
-    if (p.StartsWith("/api/reports/", StringComparison.OrdinalIgnoreCase)) return new Uri(reporting);
-    if (p.StartsWith("/api/audit/", StringComparison.OrdinalIgnoreCase)) return new Uri(audit);
+    if (p.Equals("/api/reports", StringComparison.OrdinalIgnoreCase) || p.StartsWith("/api/reports/", StringComparison.OrdinalIgnoreCase)) return new Uri(reporting);
+    if (p.Equals("/api/audit", StringComparison.OrdinalIgnoreCase) || p.StartsWith("/api/audit/", StringComparison.OrdinalIgnoreCase)) return new Uri(audit);
     return new Uri(api);
 }
 
@@ -80,18 +83,38 @@ app.MapGet("/gateway/routes", () => Results.Ok(new
 }));
 
 // Терминальный реверс-прокси (fallback для всех остальных путей).
-app.Run(async ctx =>
+// Терминальный реверс-прокси: только для путей, не сматченных эндпоинтами выше.
+app.Use(async (ctx, next) =>
 {
+    if (ctx.GetEndpoint() is not null) { await next(); return; }
     var target = Upstream(ctx);
-    if (ctx.WebSockets.IsWebSocketRequest)
+    try
     {
-        await ProxyWebSocketAsync(ctx, target, ctx.RequestAborted);
-        return;
+        if (ctx.WebSockets.IsWebSocketRequest)
+        {
+            await ProxyWebSocketAsync(ctx, target, ctx.RequestAborted);
+            return;
+        }
+        await ProxyHttpAsync(ctx, target, ctx.RequestAborted);
     }
-    await ProxyHttpAsync(ctx, target, ctx.RequestAborted);
+    catch (Exception ex) when (ex is HttpRequestException or IOException or OperationCanceledException)
+    {
+        ctx.Response.StatusCode = 502;
+        await ctx.Response.WriteAsync("upstream unavailable: " + target);
+    }
 });
 
 app.Run();
+
+static bool IsHopByHop(string name)
+    => name.Equals("Connection", StringComparison.OrdinalIgnoreCase)
+    || name.Equals("Keep-Alive", StringComparison.OrdinalIgnoreCase)
+    || name.Equals("Proxy-Authenticate", StringComparison.OrdinalIgnoreCase)
+    || name.Equals("Proxy-Authorization", StringComparison.OrdinalIgnoreCase)
+    || name.Equals("TE", StringComparison.OrdinalIgnoreCase)
+    || name.Equals("Trailer", StringComparison.OrdinalIgnoreCase)
+    || name.Equals("Transfer-Encoding", StringComparison.OrdinalIgnoreCase)
+    || name.Equals("Upgrade", StringComparison.OrdinalIgnoreCase);
 
 static async Task ProxyHttpAsync(HttpContext ctx, Uri target, CancellationToken ct)
 {
@@ -100,21 +123,29 @@ static async Task ProxyHttpAsync(HttpContext ctx, Uri target, CancellationToken 
 
     using var upstream = new HttpRequestMessage(new HttpMethod(ctx.Request.Method), new Uri(target, PathAndQuery(ctx)));
 
+    // Content-заголовки (Content-Type и т.п.) должны попасть на HttpContent, а не в request headers:
+    // создаём контент ДО копирования заголовков.
+    if (ctx.Request.ContentLength is > 0)
+        upstream.Content = new StreamContent(ctx.Request.Body);
+
     foreach (var h in ctx.Request.Headers)
     {
         if (h.Key.Equals("Host", StringComparison.OrdinalIgnoreCase)) continue;
         if (h.Key.Equals("Connection", StringComparison.OrdinalIgnoreCase)) continue;
+        if (h.Key.Equals("Content-Length", StringComparison.OrdinalIgnoreCase)) continue; // выставит HttpClient
         if (!upstream.Headers.TryAddWithoutValidation(h.Key, (IEnumerable<string>)h.Value))
             upstream.Content?.Headers.TryAddWithoutValidation(h.Key, (IEnumerable<string>)h.Value);
     }
-    if (ctx.Request.ContentLength is > 0)
-        upstream.Content = new StreamContent(ctx.Request.Body);
 
     using var resp = await client.SendAsync(upstream, HttpCompletionOption.ResponseHeadersRead, ct);
 
     ctx.Response.StatusCode = (int)resp.StatusCode;
-    foreach (var h in resp.Headers)       ctx.Response.Headers.TryAdd(h.Key, string.Join(",", h.Value));
-    foreach (var h in resp.Content.Headers) ctx.Response.Headers.TryAdd(h.Key, string.Join(",", h.Value));
+    // Hop-by-hop заголовки (Transfer-Encoding/Connection/Keep-Alive и т.д.) НЕ копируем:
+    // Kestrel сам управляет фреймингом ответа, иначе нарушается протокол (сброс соединения).
+    foreach (var h in resp.Headers)
+        if (!IsHopByHop(h.Key)) ctx.Response.Headers.TryAdd(h.Key, string.Join(",", h.Value));
+    foreach (var h in resp.Content.Headers)
+        if (!IsHopByHop(h.Key)) ctx.Response.Headers.TryAdd(h.Key, string.Join(",", h.Value));
     await resp.Content.CopyToAsync(ctx.Response.Body, ct);
 }
 

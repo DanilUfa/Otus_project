@@ -21,7 +21,7 @@ public class LeaveService(
 {
     public async Task<LeaveRequestDto> SubmitAsync(CreateLeaveRequestRequest request, CancellationToken ct = default)
     {
-        var user = await userRepository.GetByIdAsync(request.UserId, ct)
+        var user = await userRepository.GetByIdWithManagerAsync(request.UserId, ct)
             ?? throw new InvalidOperationException($"Пользователь {request.UserId} не найден.");
 
         var leaveRequest = new LeaveRequestBuilder()
@@ -41,10 +41,13 @@ public class LeaveService(
             new LeaveRequestSubmitted(
                 leaveRequest.Id,
                 leaveRequest.UserId,
+                user.Name,
                 leaveRequest.Type,
                 leaveRequest.StartDate,
                 leaveRequest.EndDate,
-                leaveRequest.CreatedAt),
+                leaveRequest.CreatedAt,
+                user.Email,
+                user.Manager?.Email ?? ""),
             ct);
 
         metrics.LeavesSubmitted.Add(1);
@@ -67,16 +70,19 @@ public class LeaveService(
         // State: Draft → Submitted (нелегальные переходы запрещены).
         LeaveState.For(lr.Status).EnsureCanTransitionTo(LeaveStatus.Submitted);
 
+        var owner = await userRepository.GetByIdWithManagerAsync(lr.UserId, ct);
+
         lr.Status = LeaveStatus.Submitted;
         await leaveRepository.SaveAsync(ct);
 
         await publishEndpoint.Publish(
-            new LeaveRequestSubmitted(lr.Id, lr.UserId, lr.Type, lr.StartDate, lr.EndDate, lr.CreatedAt),
+            new LeaveRequestSubmitted(lr.Id, lr.UserId, owner?.Name ?? $"User {lr.UserId}",
+                lr.Type, lr.StartDate, lr.EndDate, lr.CreatedAt,
+                owner?.Email ?? "", owner?.Manager?.Email ?? ""),
             ct);
         metrics.LeavesSubmitted.Add(1);
 
-        var user = await userRepository.GetByIdAsync(lr.UserId, ct);
-        var dto = ToDto(lr, user?.Name ?? $"User {lr.UserId}");
+        var dto = ToDto(lr, owner?.Name ?? $"User {lr.UserId}");
         try { await realtime.NotifyLeaveCreatedAsync(dto, ct); } catch { }
 
         return dto;
@@ -96,8 +102,10 @@ public class LeaveService(
 
         // Отмена — тоже изменение статуса: уведомляем шину (reporting уберёт строку
         // из read-модели, audit запишет историю) и realtime-подписчиков.
+        var owner2 = await userRepository.GetByIdAsync(lr.UserId, ct);
         await publishEndpoint.Publish(
-            new LeaveRequestStatusChanged(lr.Id, lr.UserId, LeaveStatus.Cancelled, lr.StartDate, lr.EndDate),
+            new LeaveRequestStatusChanged(lr.Id, lr.UserId, LeaveStatus.Cancelled,
+                lr.StartDate, lr.EndDate, owner2?.Email ?? ""),
             ct);
         try { await realtime.NotifyStatusChangedAsync(lr.Id, LeaveStatus.Cancelled.ToString(), ct); } catch { }
     }
@@ -141,10 +149,10 @@ public class LeaveService(
         if (newStatus == LeaveStatus.Approved) metrics.LeavesApproved.Add(1);
         else if (newStatus == LeaveStatus.Declined) metrics.LeavesDeclined.Add(1);
 
-        // Уведомляем сотрудника об утверждении/отклонении (Worker шлёт email).
+        // Уведомляем сотрудника об утверждении/отклонении (notifier шлёт email).
         await publishEndpoint.Publish(
             new LeaveRequestStatusChanged(
-                lr.Id, lr.UserId, newStatus, lr.StartDate, lr.EndDate),
+                lr.Id, lr.UserId, newStatus, lr.StartDate, lr.EndDate, owner.Email),
             ct);
 
         // Realtime: сообщаем подключённым SPA о смене статуса (best-effort).

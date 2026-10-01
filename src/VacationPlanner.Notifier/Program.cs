@@ -1,15 +1,13 @@
 using MassTransit;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using VacationPlanner.Application;
 using VacationPlanner.Infrastructure;
 using VacationPlanner.Notifier.Consumers;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
+// notifier — stateless сервис: только уведомления, без собственной БД.
+builder.Services.AddNotifications();
 
 var rabbit = builder.Configuration.GetSection("RabbitMq");
 builder.Services.AddMassTransit(x =>
@@ -28,12 +26,4 @@ builder.Services.AddMassTransit(x =>
 });
 
 var host = builder.Build();
-
-// Применяем миграции идемпотентно (если другой сервис уже применил — ничего не делает).
-using (var scope = host.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
-}
-
 await host.RunAsync();

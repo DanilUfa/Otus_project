@@ -54,7 +54,7 @@ services:
     networks: [vacnet]
 
   # =====================================================================
-  # Микросервисы приложения (слабо связаны через RabbitMQ).
+  # Микросервисы приложения (слабо связаны через RabbitMQ). У каждого сервиса — своя БД.
   # Все публичные запросы идут через API Gateway на :5000.
   # =====================================================================
 
@@ -90,7 +90,6 @@ services:
   notifier:
     build: { context: ., dockerfile: src/VacationPlanner.Notifier/Dockerfile }
     environment:
-      ConnectionStrings__Default: Host=postgres;Port=5432;Database=vacation;Username=vac;Password=vac
       RabbitMq__Host: rabbitmq
       RabbitMq__Username: vac
       RabbitMq__Password: vac
@@ -101,7 +100,6 @@ services:
       Notifications__Email__From: vacation@vac.local
     restart: unless-stopped
     depends_on:
-      postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     networks: [vacnet]
 
@@ -123,7 +121,7 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:80
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__Default: Host=postgres;Port=5432;Database=vacation;Username=vac;Password=vac
+      ConnectionStrings__Audit: Host=postgres;Port=5432;Database=vacation_audit;Username=vac;Password=vac
       RabbitMq__Host: rabbitmq
       RabbitMq__Username: vac
       RabbitMq__Password: vac
@@ -149,7 +147,7 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:80
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__Default: Host=postgres;Port=5432;Database=vacation;Username=vac;Password=vac
+      ConnectionStrings__Reporting: Host=postgres;Port=5432;Database=vacation_reporting;Username=vac;Password=vac
       RabbitMq__Host: rabbitmq
       RabbitMq__Username: vac
       RabbitMq__Password: vac

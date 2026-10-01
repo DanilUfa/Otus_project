@@ -3,12 +3,14 @@ using VacationPlanner.Domain.Entities;
 
 namespace VacationPlanner.Infrastructure;
 
+/// <summary>
+/// Контекст write-бounded-контекста (api / scheduler): сотрудники и заявки.
+/// У каждого сервиса своя БД: у audit — AuditDbContext, у reporting — ReportingDbContext.
+/// </summary>
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
-    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
-    public DbSet<ReadLeave> ReadLeaves => Set<ReadLeave>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -30,25 +32,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             e.HasIndex(lr => new { lr.UserId, lr.StartDate });
             e.Property(lr => lr.Reason).HasMaxLength(500);
-        });
-
-        // --- Аудит (bounded-контекст audit) ---
-        modelBuilder.Entity<AuditLog>(e =>
-        {
-            e.ToTable("AuditLogs");
-            e.HasIndex(a => a.RequestId);
-            e.HasIndex(a => a.CreatedAt);
-            e.Property(a => a.Action).HasMaxLength(32);
-            e.Property(a => a.Detail).HasMaxLength(128);
-        });
-
-        // --- Read-модель календаря (bounded-контекст reporting) ---
-        modelBuilder.Entity<ReadLeave>(e =>
-        {
-            e.ToTable("ReadLeaves");
-            e.HasIndex(r => new { r.UserId, r.Status });
-            e.HasIndex(r => new { r.StartDate, r.Status });
-            e.Property(r => r.UserName).HasMaxLength(120);
         });
     }
 }

@@ -8,8 +8,7 @@ using VacationPlanner.Infrastructure;
 namespace VacationPlanner.Reporting.Consumers;
 
 /// <summary>
-/// Микросервис <b>reporting</b>: статус изменён → обновляем/гасим строку read-модели.
-/// Approved остаётся, Declined/Cancelled выводится из календаря (удаляем).
+/// Микросервис <b>reporting</b>: статус изменён → обновляем/гасим read-модель в СВОЕЙ БД.
 /// </summary>
 public class LeaveRequestStatusChangedConsumer(
     IServiceScopeFactory scopeFactory,
@@ -19,7 +18,7 @@ public class LeaveRequestStatusChangedConsumer(
     {
         var e = context.Message;
         using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<ReportingDbContext>();
 
         var row = await db.ReadLeaves.FirstOrDefaultAsync(r => r.RequestId == e.RequestId, context.CancellationToken);
         if (row is null) return;

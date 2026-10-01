@@ -8,7 +8,7 @@ using VacationPlanner.Infrastructure;
 namespace VacationPlanner.Audit.Consumers;
 
 /// <summary>
-/// Микросервис <b>audit</b>: фиксирует создание заявки (публ. → своя таблица AuditLogs).
+/// Микросервис <b>audit</b>: фиксирует создание заявки в СВОЕЙ БД (AuditLogs).
 /// </summary>
 public class LeaveSubmittedAuditConsumer(
     IServiceScopeFactory scopeFactory,
@@ -18,7 +18,7 @@ public class LeaveSubmittedAuditConsumer(
     {
         var e = context.Message;
         using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
 
         db.AuditLogs.Add(new AuditLog { RequestId = e.RequestId, UserId = e.UserId, Action = "created", Detail = e.Type.ToString() });
         await db.SaveChangesAsync(context.CancellationToken);

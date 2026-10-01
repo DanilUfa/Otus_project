@@ -4,14 +4,13 @@ using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using VacationPlanner.Application;
 using VacationPlanner.Audit.Consumers;
 using VacationPlanner.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
+// Своё хранилище: собственная БД vacation_audit (без доступа к данным api).
+builder.Services.AddAuditStorage(builder.Configuration);
 
 // Self-documentation: Swagger API этого сервиса.
 builder.Services.AddEndpointsApiExplorer();
@@ -37,7 +36,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 
-// Слушаем события шины и пишем аудит в свою таблицу.
+// Слушаем события шины и пишем аудит в свою БД.
 var rabbit = builder.Configuration.GetSection("RabbitMq");
 builder.Services.AddMassTransit(x =>
 {
@@ -57,7 +56,8 @@ builder.Services.AddMassTransit(x =>
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var db = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
+    EnsureDatabase.EnsureCreated(builder.Configuration.GetConnectionString("Audit")!);
     db.Database.Migrate();
 }
 
@@ -67,11 +67,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/health/live", () => Results.Ok("Healthy"));
-app.MapGet("/health/ready", (AppDbContext db) => db.Users.Any() ? Results.Ok("Healthy") : Results.StatusCode(503));
+app.MapGet("/health/ready", (AuditDbContext db) => db.AuditLogs.Any() ? Results.Ok("Healthy") : Results.StatusCode(503));
 app.MapGet("/api/info", () => Results.Ok(ServiceInfo()));
 
-// История операций над заявками (bounded-контекст аудита).
-app.MapGet("/api/audit", async (int? requestId, int? userId, int? limit, AppDbContext db, CancellationToken ct) =>
+// История операций над заявками (bounded-контекст аудита, своя БД).
+app.MapGet("/api/audit", async (int? requestId, int? userId, int? limit, AuditDbContext db, CancellationToken ct) =>
 {
     var q = db.AuditLogs.AsNoTracking().AsQueryable();
     if (requestId.HasValue) q = q.Where(a => a.RequestId == requestId.Value);
@@ -93,6 +93,7 @@ static object ServiceInfo()
         informationalVersion = asm.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion,
         environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development",
         swagger = "/swagger",
-        health = "/health/ready"
+        health = "/health/ready",
+        storage = "database: vacation_audit"
     };
 }

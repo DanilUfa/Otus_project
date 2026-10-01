@@ -1,7 +1,6 @@
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using VacationPlanner.Application.Contracts;
 using VacationPlanner.Domain;
 using VacationPlanner.Domain.Entities;
 using VacationPlanner.Domain.Events;
@@ -10,24 +9,26 @@ using VacationPlanner.Infrastructure;
 namespace VacationPlanner.Reporting.Consumers;
 
 /// <summary>
-/// Микросервис <b>reporting</b>: заявка подана → upsert строки read-модели (CQRS).
+/// Микросервис <b>reporting</b>: заявка подана → upsert read-модели в СВОЕЙ БД.
+/// Имя/email приходят в событии — сервис не обращается к БД api.
 /// </summary>
 public class LeaveRequestSubmittedConsumer(
     IServiceScopeFactory scopeFactory,
-    IUserRepository userRepository,
     ILogger<LeaveRequestSubmittedConsumer> log) : IConsumer<LeaveRequestSubmitted>
 {
     public async Task Consume(ConsumeContext<LeaveRequestSubmitted> context)
     {
         var e = context.Message;
         using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        var userName = (await userRepository.GetByIdAsync(e.UserId, context.CancellationToken))?.Name ?? $"User {e.UserId}";
+        var db = scope.ServiceProvider.GetRequiredService<ReportingDbContext>();
 
         var existing = await db.ReadLeaves.FirstOrDefaultAsync(r => r.RequestId == e.RequestId, context.CancellationToken);
         if (existing is not null)
         {
+            existing.UserName = e.UserName;
+            existing.Type = e.Type;
+            existing.StartDate = e.StartDate;
+            existing.EndDate = e.EndDate;
             existing.Status = LeaveStatus.Submitted;
             existing.UpdatedAt = DateTime.UtcNow;
         }
@@ -37,7 +38,7 @@ public class LeaveRequestSubmittedConsumer(
             {
                 RequestId = e.RequestId,
                 UserId = e.UserId,
-                UserName = userName,
+                UserName = e.UserName,
                 Type = e.Type,
                 StartDate = e.StartDate,
                 EndDate = e.EndDate,

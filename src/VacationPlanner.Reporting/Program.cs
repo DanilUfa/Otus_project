@@ -4,15 +4,14 @@ using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using VacationPlanner.Application;
+using VacationPlanner.Domain;
 using VacationPlanner.Infrastructure;
 using VacationPlanner.Reporting.Consumers;
-using VacationPlanner.Domain;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
+// Своё хранилище: собственная БД vacation_reporting (read-модель CQRS).
+builder.Services.AddReportingStorage(builder.Configuration);
 
 // Self-documentation: Swagger API этого сервиса.
 builder.Services.AddEndpointsApiExplorer();
@@ -54,7 +53,8 @@ builder.Services.AddMassTransit(x =>
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var db = scope.ServiceProvider.GetRequiredService<ReportingDbContext>();
+    EnsureDatabase.EnsureCreated(builder.Configuration.GetConnectionString("Reporting")!);
     db.Database.Migrate();
 }
 
@@ -64,13 +64,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/health/live", () => Results.Ok("Healthy"));
-app.MapGet("/health/ready", (AppDbContext db) => db.Users.Any() ? Results.Ok("Healthy") : Results.StatusCode(503));
+app.MapGet("/health/ready", (ReportingDbContext db) => db.ReadLeaves.Any() ? Results.Ok("Healthy") : Results.StatusCode(503));
+app.MapGet("/api/info", () => Results.Ok(ServiceInfo()));
 
-// Идентификация сервиса (типичный endpoint реального продукта).
-app.MapGet("/api/info", () => Results.Ok(ServiceInfo("reporting")));
-
-// Read-модель (CQRS): календарь отпусков отдела из денормализованной таблицы ReadLeaves.
-app.MapGet("/api/reports/calendar", async (int? year, AppDbContext db, CancellationToken ct) =>
+// Read-модель (CQRS): календарь отпусков отдела из СВОЕЙ БД.
+app.MapGet("/api/reports/calendar", async (int? year, ReportingDbContext db, CancellationToken ct) =>
 {
     var y = year ?? DateTime.UtcNow.Year;
     var statuses = new[] { (int)LeaveStatus.Submitted, (int)LeaveStatus.Approved };
@@ -94,17 +92,18 @@ app.MapGet("/api/reports/calendar", async (int? year, AppDbContext db, Cancellat
 
 app.Run();
 
-static object ServiceInfo(string name)
+static object ServiceInfo()
 {
     var asm = typeof(Program).Assembly;
     return new
     {
-        service = name,
+        service = "reporting",
         version = asm.GetName().Version?.ToString() ?? "0.0.0",
         informationalVersion = asm.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion,
         environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development",
         swagger = "/swagger",
-        health = "/health/ready"
+        health = "/health/ready",
+        storage = "database: vacation_reporting"
     };
 }
 

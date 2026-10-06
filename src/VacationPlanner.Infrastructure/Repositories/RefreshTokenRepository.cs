@@ -17,4 +17,9 @@ public class RefreshTokenRepository(AppDbContext db) : IRefreshTokenRepository
 
     public Task SaveAsync(CancellationToken ct = default)
         => db.SaveChangesAsync(ct);
+
+    public Task<int> DeleteExpiredAndRevokedAsync(DateTime revokedBefore, CancellationToken ct = default)
+        => db.RefreshTokens
+            .Where(t => t.ExpiresAt < DateTime.UtcNow || (t.RevokedAt != null && t.RevokedAt < revokedBefore))
+            .ExecuteDeleteAsync(ct);
 }

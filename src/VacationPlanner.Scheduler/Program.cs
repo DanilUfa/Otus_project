@@ -11,8 +11,10 @@ builder.Logging.AddConsole();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// Фоновая политика: авто-закрытие «зависших» черновиков (State-переходы).
+// Фоновые политики: авто-закрытие «зависших» черновиков (State-переходы)
+// и чистка недействительных refresh-токенов.
 builder.Services.AddHostedService<DraftCleanupHostedService>();
+builder.Services.AddHostedService<RefreshTokenCleanupHostedService>();
 
 var host = builder.Build();
 using (var scope = host.Services.CreateScope())

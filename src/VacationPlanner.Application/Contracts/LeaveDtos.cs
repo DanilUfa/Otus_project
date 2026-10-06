@@ -20,4 +20,5 @@ public record LeaveRequestDto(
     DateTime EndDate,
     LeaveStatus Status,
     string Reason,
-    int Days);
+    int Days,
+    int? ManagerId = null);

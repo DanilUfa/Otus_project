@@ -10,7 +10,8 @@ namespace VacationPlanner.Infrastructure.Security;
 
 public class JwtTokenService(IConfiguration configuration) : ITokenService
 {
-    public LoginResponse CreateToken(User user)
+    /// <summary>Короткоживущий JWT (HS256). Срок — Jwt:ExpiresMinutes (по умолчанию 120).</summary>
+    public string CreateAccessToken(User user)
     {
         var jwt = configuration.GetSection("Jwt");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"] ?? throw new InvalidOperationException("Jwt:Key не задан.")));
@@ -23,18 +24,15 @@ public class JwtTokenService(IConfiguration configuration) : ITokenService
             new(ClaimTypes.Role, user.Role.ToString())
         };
 
+        var minutes = int.TryParse(jwt["ExpiresMinutes"], out var m) && m > 0 ? m : 120;
         var token = new JwtSecurityToken(
             issuer: jwt["Issuer"],
             audience: jwt["Audience"],
             claims: claims,
             notBefore: DateTime.UtcNow,
-            expires: DateTime.UtcNow.AddMinutes(int.TryParse(jwt["ExpiresMinutes"], out var m) ? m : 120),
+            expires: DateTime.UtcNow.AddMinutes(minutes),
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
 
-        return new LoginResponse(
-            new JwtSecurityTokenHandler().WriteToken(token),
-            user.Id,
-            user.Name,
-            user.Role.ToString());
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }

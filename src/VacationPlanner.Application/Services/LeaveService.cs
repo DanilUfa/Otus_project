@@ -52,9 +52,9 @@ public class LeaveService(
 
         metrics.LeavesSubmitted.Add(1);
 
-        // Realtime: сообщаем подключённым SPA о новой заявке (best-effort).
-        var dto = ToDto(leaveRequest, user.Name);
-        try { await realtime.NotifyLeaveCreatedAsync(dto, ct); } catch { /* не должно ломать создание */ }
+        // Realtime: владельцу и руководителю (best-effort, не должно ломать создание).
+        var dto = ToDto(leaveRequest, user.Name, user.ManagerId);
+        try { await realtime.NotifyLeaveCreatedAsync(dto, ct); } catch { }
 
         return dto;
     }
@@ -82,7 +82,7 @@ public class LeaveService(
             ct);
         metrics.LeavesSubmitted.Add(1);
 
-        var dto = ToDto(lr, owner?.Name ?? $"User {lr.UserId}");
+        var dto = ToDto(lr, owner?.Name ?? $"User {lr.UserId}", owner?.ManagerId);
         try { await realtime.NotifyLeaveCreatedAsync(dto, ct); } catch { }
 
         return dto;
@@ -107,7 +107,7 @@ public class LeaveService(
             new LeaveRequestStatusChanged(lr.Id, lr.UserId, LeaveStatus.Cancelled,
                 lr.StartDate, lr.EndDate, owner2?.Email ?? ""),
             ct);
-        try { await realtime.NotifyStatusChangedAsync(lr.Id, LeaveStatus.Cancelled.ToString(), ct); } catch { }
+        try { await realtime.NotifyStatusChangedAsync(lr.Id, LeaveStatus.Cancelled.ToString(), lr.UserId, ct); } catch { }
     }
 
     /// <summary>Сохраняет черновик (статус Draft): ни событий, ни метрик, ни realtime.</summary>
@@ -155,8 +155,8 @@ public class LeaveService(
                 lr.Id, lr.UserId, newStatus, lr.StartDate, lr.EndDate, owner.Email),
             ct);
 
-        // Realtime: сообщаем подключённым SPA о смене статуса (best-effort).
-        try { await realtime.NotifyStatusChangedAsync(lr.Id, newStatus.ToString(), ct); } catch { /* best-effort */ }
+        // Realtime: владельцу заявки (best-effort).
+        try { await realtime.NotifyStatusChangedAsync(lr.Id, newStatus.ToString(), lr.UserId, ct); } catch { }
     }
 
     public async Task<List<LeaveRequestDto>> GetAllAsync(CancellationToken ct = default)
@@ -168,7 +168,20 @@ public class LeaveService(
         return requests.Select(r => ToDto(r, names.GetValueOrDefault(r.UserId) ?? $"User {r.UserId}")).ToList();
     }
 
-    private static LeaveRequestDto ToDto(LeaveRequest r, string userName) => new(
+    /// <summary>Только заявки указанного пользователя (для сотрудника: видит свои).</summary>
+    public async Task<List<LeaveRequestDto>> GetAllForUserAsync(int userId, CancellationToken ct = default)
+    {
+        var users = await userRepository.GetAllAsync(ct);
+        var names = users.ToDictionary(u => u.Id, u => u.Name);
+
+        var requests = await leaveRepository.GetAllAsync(ct);
+        return requests
+            .Where(r => r.UserId == userId)
+            .Select(r => ToDto(r, names.GetValueOrDefault(r.UserId) ?? $"User {r.UserId}"))
+            .ToList();
+    }
+
+    private static LeaveRequestDto ToDto(LeaveRequest r, string userName, int? managerId = null) => new(
         r.Id,
         r.UserId,
         userName,
@@ -177,5 +190,6 @@ public class LeaveService(
         r.EndDate,
         r.Status,
         r.Reason,
-        r.Days);
+        r.Days,
+        managerId);
 }

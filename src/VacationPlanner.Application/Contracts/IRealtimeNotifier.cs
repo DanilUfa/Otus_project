@@ -1,11 +1,13 @@
+using VacationPlanner.Domain.Entities;
+
 namespace VacationPlanner.Application.Contracts;
 
-/// <summary>
-/// Контракт realtime-оповещений (реализуется на SignalR в Web, а в приложении —
-/// только интерфейс). Лучшее-effort: сбой уведомления не должен ломать запрос.
-/// </summary>
+/// <summary>Канал realtime (SignalR). Application знает только интерфейс.</summary>
 public interface IRealtimeNotifier
 {
+    /// <summary>Новая заявка: уведомляем владельца и (если есть) руководителя.</summary>
     Task NotifyLeaveCreatedAsync(LeaveRequestDto dto, CancellationToken ct = default);
-    Task NotifyStatusChangedAsync(int requestId, string status, CancellationToken ct = default);
+
+    /// <summary>Смена статуса: уведомляем владельца заявки.</summary>
+    Task NotifyStatusChangedAsync(int requestId, string status, int ownerUserId, CancellationToken ct = default);
 }

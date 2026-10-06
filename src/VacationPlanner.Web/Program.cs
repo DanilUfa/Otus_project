@@ -19,6 +19,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using VacationPlanner.Web.Auth;
 using VacationPlanner.Web.Caching;
 using VacationPlanner.Web.Health;
 using VacationPlanner.Web.Hubs;
@@ -83,6 +84,7 @@ builder.Services.AddMassTransit(x =>
 // --- SignalR (realtime) ---
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IRealtimeNotifier, RealtimeNotifier>();
+builder.Services.AddSingleton<LoginThrottle>();
 
 // --- Redis (IDistributedCache) ---
 var redisHost = builder.Configuration["Redis:Host"] ?? "localhost";
@@ -148,37 +150,83 @@ app.MapHub<VacationHub>("/hubs/vacation");
 var api = app.MapGroup("/api");
 
 // ---------- Auth ----------
-api.MapPost("/auth/login", async (LoginRequest request, AuthService auth, CancellationToken ct)
-        => await auth.LoginAsync(request, ct))
+api.MapPost("/auth/login", async (LoginRequest request, AuthService auth, LoginThrottle throttle, CancellationToken ct)
+        => {
+            if (!throttle.TryEnter(request.Email))
+                return Results.Json(new { error = "Слишком много попыток входа. Подождите 15 минут." },
+                    statusCode: StatusCodes.Status429TooManyRequests);
+            try
+            {
+                var response = await auth.LoginAsync(request, ct);
+                throttle.Reset(request.Email);
+                return Results.Ok(response);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                throttle.RegisterFailure(request.Email);
+                return Results.Json(new { error = "Неверный email или пароль." },
+                    statusCode: StatusCodes.Status401Unauthorized);
+            }
+        })
    .WithName("Login")
    ;
 
+// Ротация refresh-токена: старый отзывается, выдаётся новая пара access+refresh.
+api.MapPost("/auth/refresh", async (RefreshRequest request, AuthService auth, CancellationToken ct)
+        => {
+            try { return Results.Ok(await auth.RefreshAsync(request.RefreshToken, ct)); }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status401Unauthorized);
+            }
+        })
+   .WithName("Refresh")
+   ;
+
+// Logout: отзыв refresh-токена (access — stateless, живёт до истечения). Идемпотентно.
+api.MapPost("/auth/logout", async (RefreshRequest request, AuthService auth, CancellationToken ct)
+        => { await auth.LogoutAsync(request.RefreshToken, ct); return Results.NoContent(); })
+   .WithName("Logout")
+   ;
+
 // ---------- Users ----------
-api.MapGet("/users", async (IUserRepository users, IDistributedCache cache, CancellationToken ct)
-        => Results.Ok(await cache.GetOrSetAsync("users",
-            async () => (await users.GetAllAsync(ct))
-                .Select(u => new UserDto(u.Id, u.Name, u.Email, u.Role.ToString()))
-                .ToList(),
-            TimeSpan.FromSeconds(30), ct)))
+api.MapGet("/users", async (IUserRepository users, IDistributedCache cache, ClaimsPrincipal user, CancellationToken ct)
+        => {
+            var all = await cache.GetOrSetAsync("users",
+                async () => (await users.GetAllAsync(ct))
+                    .Select(u => new UserDto(u.Id, u.Name, u.Email, u.Role.ToString()))
+                    .ToList(),
+                TimeSpan.FromSeconds(30), ct);
+
+            var callerId = GetUserId(user);
+            if (user.IsInRole(UserRole.Manager.ToString()))
+                return Results.Ok(all);
+
+            // Сотрудник видит себя и своего руководителя.
+            var managerId = (await users.GetByIdAsync(callerId, ct))?.ManagerId;
+            return Results.Ok(all.Where(u => u.Id == callerId || u.Id == managerId).ToList());
+        })
    .RequireAuthorization("AuthenticatedOnly")
    .WithName("GetUsers")
    ;
 
 // ---------- Leave requests ----------
-api.MapGet("/leave", async (LeaveService service, CancellationToken ct)
-        => Results.Ok(await service.GetAllAsync(ct)))
+api.MapGet("/leave", async (LeaveService service, ClaimsPrincipal user, CancellationToken ct)
+        => Results.Ok(user.IsInRole(UserRole.Manager.ToString())
+            ? await service.GetAllAsync(ct)
+            : await service.GetAllForUserAsync(GetUserId(user), ct)))
    .RequireAuthorization("AuthenticatedOnly")
    .WithName("GetLeaveRequests")
    ;
 
-api.MapPost("/leave", async (CreateLeaveRequestRequest request, LeaveService service, CancellationToken ct)
-        => Results.Created("/api/leave", await service.SubmitAsync(request, ct)))
+api.MapPost("/leave", async (CreateLeaveRequestRequest request, LeaveService service, ClaimsPrincipal user, CancellationToken ct)
+        => Results.Created("/api/leave", await service.SubmitAsync(request with { UserId = GetUserId(user) }, ct)))
    .RequireAuthorization("AuthenticatedOnly")
    .WithName("SubmitLeaveRequest")
    ;
 
-api.MapPost("/leave/draft", async (CreateLeaveRequestRequest request, LeaveService service, CancellationToken ct)
-        => Results.Created("/api/leave", await service.SaveDraftAsync(request, ct)))
+api.MapPost("/leave/draft", async (CreateLeaveRequestRequest request, LeaveService service, ClaimsPrincipal user, CancellationToken ct)
+        => Results.Created("/api/leave", await service.SaveDraftAsync(request with { UserId = GetUserId(user) }, ct)))
    .RequireAuthorization("AuthenticatedOnly")
    .WithName("SaveLeaveDraft")
    ;
@@ -218,8 +266,11 @@ api.MapPost("/leave/{id:int}/decline", async (int id, LeaveService service, Clai
 // ---------- Balance ----------
 api.MapGet("/balance/{userId:int}", async (
         int userId, [FromQuery] int? year, BalanceService balance, IDistributedCache cache,
-        CancellationToken ct)
+        ClaimsPrincipal user, CancellationToken ct)
         => {
+            if (!user.IsInRole(UserRole.Manager.ToString()) && GetUserId(user) != userId)
+                throw new UnauthorizedAccessException("Запрос баланса другого сотрудника доступен руководителю.");
+
             var y = year ?? DateTime.UtcNow.Year;
             var remaining = await cache.GetOrSetAsync($"balance:{userId}:{y}",
                 () => balance.GetRemainingAnnualDaysAsync(userId, y, ct),

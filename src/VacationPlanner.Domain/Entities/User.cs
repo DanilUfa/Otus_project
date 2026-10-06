@@ -7,7 +7,7 @@ public class User
     public string Email { get; set; } = "";
     public UserRole Role { get; set; } = UserRole.Employee;
 
-    /// <summary>Хэш пароля (SHA-256). Черновик; позже заменим на ASP.NET Identity/Keycloak.</summary>
+    /// <summary>Хэш пароля (PBKDF2; legacy-хэши SHA-256 плавающе апгрейдятся при входе).</summary>
     public string PasswordHash { get; set; } = "";
 
     /// <summary>Руководитель пользователя (self-reference).</summary>

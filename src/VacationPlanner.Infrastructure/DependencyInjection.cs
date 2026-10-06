@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddDbContext<AppDbContext>(o => o.UseNpgsql(connectionString));
         services.AddScoped<ILeaveRepository, LeaveRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 
         // Security
         services.AddScoped<IPasswordHasher, PasswordHasher>();

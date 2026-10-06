@@ -26,6 +26,10 @@ using VacationPlanner.Web.Realtime;
 using User = VacationPlanner.Domain.Entities.User;
 
 var builder = WebApplication.CreateBuilder(args);
+// Логирование в Console (как в контейнере): EventLog на Windows без прав
+// кидает исключение прямо из logger'а и роняет обработку запроса/консьюмера.
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
 
 // --- SPA static root: wwwroot каталога проекта Web (детерминированно, независимо от рабочего каталога запуска) ---
 builder.WebHost.UseWebRoot(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "wwwroot"));
@@ -111,6 +115,22 @@ app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Доменные исключения -> HTTP-коды (до эндпоинтов; 500 для прочего).
+app.Use(async (ctx, next) =>
+{
+    try { await next(); }
+    catch (UnauthorizedAccessException) // нет прав на действие (не автор/не рук-ль)
+    {
+        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await ctx.Response.WriteAsJsonAsync(new { error = "Доступ запрещён: недостаточно прав." });
+    }
+    catch (InvalidOperationException ex) // нелегальный State-переход / нет заявки
+    {
+        ctx.Response.StatusCode = StatusCodes.Status409Conflict;
+        await ctx.Response.WriteAsJsonAsync(new { error = ex.Message });
+    }
+});
 
 // Метрики для Prometheus — публичный эндпоинт /metrics.
 app.MapPrometheusMetrics(app.Services.GetRequiredService<VacationMetrics>());

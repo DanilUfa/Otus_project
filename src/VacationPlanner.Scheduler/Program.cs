@@ -6,6 +6,8 @@ using VacationPlanner.Infrastructure;
 using VacationPlanner.Scheduler.HostedServices;
 
 var builder = Host.CreateApplicationBuilder(args);
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 

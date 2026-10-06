@@ -8,6 +8,10 @@ using VacationPlanner.Audit.Consumers;
 using VacationPlanner.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+// Логирование в Console (как в контейнере): EventLog на Windows без прав
+// кидает исключение прямо из logger'а и роняет обработку запроса/консьюмера.
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
 
 // Своё хранилище: собственная БД vacation_audit (без доступа к данным api).
 builder.Services.AddAuditStorage(builder.Configuration);

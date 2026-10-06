@@ -5,6 +5,8 @@ using VacationPlanner.Infrastructure;
 using VacationPlanner.Notifier.Consumers;
 
 var builder = Host.CreateApplicationBuilder(args);
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
 
 // notifier — stateless сервис: только уведомления, без собственной БД.
 builder.Services.AddNotifications();

@@ -11,13 +11,9 @@
 - **BalanceGateTests** — сериализация per-user, изоляция разных пользователей, повторный захват, cancellation.
 
 ## Запуск
-На машине с доступом к NuGet (nuget.org):
+Проект добавлен в VacationPlanner.sln; тесты гоняются штатно:
     dotnet test tests/VacationPlanner.UnitTests
+или из корня: dotnet test --filter VacationPlanner.UnitTests
 
-На рабочей машине корпоративный прокси режет nuget.org, поэтому здесь юнит-проект не восстановится.
-Офлайн-двойник тех же сценариев (без внешних пакетов):
+Офлайн-двойник тех же сценариев (без внешних пакетов, работает и без restore):
     dotnet run --project tests/VacationPlanner.Smoke
-
-## Примечание
-Проект НЕ добавлен в VacationPlanner.sln намеренно — иначе `dotnet build` решения стал бы требовать
-restore тестовых пакетов. Добавить в sln:  dotnet sln add tests/VacationPlanner.UnitTests

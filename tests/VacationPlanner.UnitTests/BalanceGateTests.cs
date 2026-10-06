@@ -1,3 +1,4 @@
+using Xunit;
 using VacationPlanner.Application.Services;
 
 namespace VacationPlanner.UnitTests;
@@ -44,6 +45,8 @@ public class BalanceGateTests
         using var held = await gate.LockAsync(7);
         using var cts = new CancellationTokenSource();
         cts.Cancel();
-        await Assert.ThrowsAsync<OperationCanceledException>(() => gate.LockAsync(7, cts.Token));
+        // WaitAsync при уже отменённом токене бросает TaskCanceledException (наследник OCE) —
+        // Assert.ThrowsAny покрывает производные типы.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => gate.LockAsync(7, cts.Token));
     }
 }

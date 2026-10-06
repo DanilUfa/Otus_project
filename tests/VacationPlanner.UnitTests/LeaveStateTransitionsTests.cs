@@ -1,3 +1,4 @@
+using Xunit;
 using VacationPlanner.Application.Patterns;
 using VacationPlanner.Domain;
 
@@ -52,6 +53,6 @@ public class LeaveStateTransitionsTests
 
     [Theory]
     [MemberData(nameof(AllowedMatrix))]
-    public void Status_property_reflects_the_state(LeaveStatus expected, LeaveStatus[] allowed)
+    public void Status_property_reflects_the_state(LeaveStatus expected, LeaveStatus[] _)
         => Assert.Equal(expected, LeaveState.For(expected).Status);
 }

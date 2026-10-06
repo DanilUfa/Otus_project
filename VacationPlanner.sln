@@ -23,6 +23,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VacationPlanner.Reporting",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VacationPlanner.Gateway", "src\VacationPlanner.Gateway\VacationPlanner.Gateway.csproj", "{E5F44BDA-68A6-423A-9CE9-1EFEAF9CD609}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VacationPlanner.UnitTests", "tests\VacationPlanner.UnitTests\VacationPlanner.UnitTests.csproj", "{911DE813-52F3-4C6D-B978-075B0ED2076F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -141,6 +145,18 @@ Global
 		{E5F44BDA-68A6-423A-9CE9-1EFEAF9CD609}.Release|x64.Build.0 = Release|Any CPU
 		{E5F44BDA-68A6-423A-9CE9-1EFEAF9CD609}.Release|x86.ActiveCfg = Release|Any CPU
 		{E5F44BDA-68A6-423A-9CE9-1EFEAF9CD609}.Release|x86.Build.0 = Release|Any CPU
+		{911DE813-52F3-4C6D-B978-075B0ED2076F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{911DE813-52F3-4C6D-B978-075B0ED2076F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{911DE813-52F3-4C6D-B978-075B0ED2076F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{911DE813-52F3-4C6D-B978-075B0ED2076F}.Debug|x64.Build.0 = Debug|Any CPU
+		{911DE813-52F3-4C6D-B978-075B0ED2076F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{911DE813-52F3-4C6D-B978-075B0ED2076F}.Debug|x86.Build.0 = Debug|Any CPU
+		{911DE813-52F3-4C6D-B978-075B0ED2076F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{911DE813-52F3-4C6D-B978-075B0ED2076F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{911DE813-52F3-4C6D-B978-075B0ED2076F}.Release|x64.ActiveCfg = Release|Any CPU
+		{911DE813-52F3-4C6D-B978-075B0ED2076F}.Release|x64.Build.0 = Release|Any CPU
+		{911DE813-52F3-4C6D-B978-075B0ED2076F}.Release|x86.ActiveCfg = Release|Any CPU
+		{911DE813-52F3-4C6D-B978-075B0ED2076F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -151,5 +167,6 @@ Global
 		{9E29F5CA-7959-47C1-9C38-1C5D8BE3C128} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{6EC7350A-6E57-4217-AE6D-48A494551ADC} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{E5F44BDA-68A6-423A-9CE9-1EFEAF9CD609} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{911DE813-52F3-4C6D-B978-075B0ED2076F} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

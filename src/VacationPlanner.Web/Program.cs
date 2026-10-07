@@ -282,7 +282,9 @@ api.MapGet("/balance/{userId:int}", async (
    ;
 
 // ---------- UI / fallback ----------
-app.MapGet("/", () => Results.Redirect("/swagger"));
+// SPA по умолчанию на "/" (Swagger остаётся на /swagger — ссылка в форме входа).
+app.MapGet("/", (IWebHostEnvironment env) =>
+    Results.File(Path.Combine(env.WebRootPath, "index.html"), "text/html"));
 app.MapFallbackToFile("index.html");
 
 app.Run();

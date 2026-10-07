@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { HubConnectionBuilder } from '@microsoft/signalr';
-import { api, TYPE_LABELS, TYPE_VALUES, STATUS_LABELS } from './api';
+import { api, onSessionExpired, TYPE_LABELS, TYPE_VALUES, STATUS_LABELS } from './api';
 import DayCalendar from './DayCalendar';
 
 const MONTHS = [
@@ -15,6 +15,12 @@ export default function App() {
   const [, force] = useState(0);
 
   useEffect(() => { if (user) refresh(); }, [user]);
+
+  // Если refresh на сервере отозван/истёк — сессия завершается принудительно.
+  useEffect(() => {
+    onSessionExpired(() => { setUser(null); sessionStorage.clear(); });
+    return () => {}; // обработчики бывают не нужны после демонтажа — App живёт всё время
+  }, []);
 
   // Realtime-подписка: новая заявка / смена статуса — мгновенно обновляем список и баланс.
   useEffect(() => {
@@ -60,7 +66,10 @@ export default function App() {
         <div className="who">
           <b className={'role-' + user.role}>{user.name}</b>
           <span className="tag">{user.role === 'Manager' ? 'Руководитель' : 'Сотрудник'}</span>
-          <button className="ghost" onClick={() => { setUser(null); localStorage.clear(); sessionStorage.clear(); }}>Выйти</button>
+          <button className="ghost" onClick={() => {
+            // Отзываем refresh-токен на сервере (best-effort), потом чистим локально.
+            api.logout().finally(() => { setUser(null); localStorage.clear(); sessionStorage.clear(); });
+          }}>Выйти</button>
         </div>
       </header>
 
@@ -111,6 +120,7 @@ function Login({ onLogin }) {
     try {
       const u = await api.login(email, password);
       localStorage.setItem('token', u.token);
+      localStorage.setItem('refreshToken', u.refreshToken);
       localStorage.setItem('user', JSON.stringify(u));
       onLogin(u);
     } catch (e) { setErr(e.message); }

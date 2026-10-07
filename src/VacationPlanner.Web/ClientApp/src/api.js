@@ -9,11 +9,66 @@ export const STATUS_LABELS = {
   4: 'Отменён'
 };
 
-// Лёгкий клиент API: хранит токен в localStorage.
+// ---------- Сессия: access + refresh в localStorage ----------
 const token = () => localStorage.getItem('token');
+const refreshToken = () => localStorage.getItem('refreshToken');
+
+// Эндпоинты, для которых 401 не означает «сессия истекла»
+// (login — неверный пароль; refresh/logout — сами про токен).
+const AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/logout']);
+
+// Слушатели «сессия истекла» (refresh не удался — UI должен вернуться к экрану входа).
+const sessionExpiredHandlers = [];
+export function onSessionExpired(handler) { sessionExpiredHandlers.push(handler); }
+
+function sessionExpired() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
+  sessionExpiredHandlers.forEach((h) => h());
+}
+
+// Единая «in-flight» ротация: параллельные 401 ждут один запрос /auth/refresh,
+// чтобы не слать N одновременных ротаций (из которых N-1 получат 401 из-за одноразовости).
+let refreshPromise = null;
+async function rotateRefresh() {
+  const rt = refreshToken();
+  if (!rt) return false;
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const res = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: rt })
+        });
+        if (!res.ok) return null;
+        return await res.json();
+      } catch { return null; }
+    })().finally(() => { refreshPromise = null; });
+  }
+  const fresh = await refreshPromise;
+  if (!fresh) return false;
+
+  localStorage.setItem('token', fresh.token);
+  localStorage.setItem('refreshToken', fresh.refreshToken);
+  // Обновляем и «user» (остальные поля не меняются, но пусть будет консистентно).
+  const stored = JSON.parse(localStorage.getItem('user') || 'null');
+  if (stored) {
+    localStorage.setItem('user', JSON.stringify({
+      ...stored,
+      token: fresh.token,
+      refreshToken: fresh.refreshToken,
+      userId: fresh.userId,
+      name: fresh.name,
+      role: fresh.role
+    }));
+  }
+  return true;
+}
 
 async function request(path, { method = 'GET', body } = {}) {
-  const res = await fetch(path, {
+  const attempt = () => fetch(path, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -22,9 +77,15 @@ async function request(path, { method = 'GET', body } = {}) {
     body: body ? JSON.stringify(body) : undefined
   });
 
+  let res = await attempt();
+  // Access-токен истёк (TTL 15 мин): одна ротация refresh-токена и повтор исходного запроса.
+  if (res.status === 401 && !AUTH_PATHS.has(path) && refreshToken()) {
+    if (await rotateRefresh()) {
+      res = await attempt();
+    }
+  }
   if (res.status === 401) {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    if (!AUTH_PATHS.has(path)) sessionExpired();
     throw new Error('Требуется авторизация');
   }
   if (!res.ok) {
@@ -37,6 +98,14 @@ async function request(path, { method = 'GET', body } = {}) {
 export const api = {
   login: (email, password) =>
     request('/api/auth/login', { method: 'POST', body: { email, password } }),
+
+  // Отзыв refresh-токена на сервере (best-effort: даже если токен уже невалиден — чтим локаль).
+  logout: () => {
+    const rt = refreshToken();
+    return rt
+      ? request('/api/auth/logout', { method: 'POST', body: { refreshToken: rt } }).catch(() => null)
+      : Promise.resolve(null);
+  },
 
   users: () => request('/api/users'),
   leaves: () => request('/api/leave'),

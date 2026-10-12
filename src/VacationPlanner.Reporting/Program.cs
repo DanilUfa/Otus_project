@@ -94,15 +94,9 @@ app.MapGet("/api/reports/calendar", async (int? year, ClaimsPrincipal user, Repo
     var y = year ?? DateTime.UtcNow.Year;
     var statuses = new[] { (int)LeaveStatus.Submitted, (int)LeaveStatus.Approved };
 
-    // Сотрудник видит только свои заявки; график отдела целиком — руководителю/админу.
-    var role = user.FindFirst(ClaimTypes.Role)?.Value;
-    var ownId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
-
-    var q = db.ReadLeaves.AsNoTracking();
-    if (role is not ("Manager" or "Admin"))
-        q = q.Where(l => l.UserId == ownId);
-
-    var leaves = await q
+    // График отпусков отдела — общий (офисная доска): дни видят все сотрудники.
+    // Сами заявки остаются приватными — их раздаёт /api/leave по ролям.
+    var leaves = await db.ReadLeaves.AsNoTracking()
         .Where(l => statuses.Contains((int)l.Status) && l.StartDate.Year <= y && l.EndDate.Year >= y)
         .OrderBy(l => l.StartDate).ThenBy(l => l.UserId)
         .ToListAsync(ct);

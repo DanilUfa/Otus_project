@@ -222,13 +222,9 @@ api.MapGet("/users", async (IUserRepository users, IDistributedCache cache, Clai
                     .ToList(),
                 TimeSpan.FromSeconds(30), ct);
 
-            var callerId = GetUserId(user);
-            if (user.IsInRole(UserRole.Manager.ToString()))
-                return Results.Ok(all);
-
-            // Сотрудник видит себя и своего руководителя.
-            var managerId = (await users.GetByIdAsync(callerId, ct))?.ManagerId;
-            return Results.Ok(all.Where(u => u.Id == callerId || u.Id == managerId).ToList());
+            // График отпусков отдела — общий (офисная доска): состав сотрудников виден всем.
+            // Сами заявки остаются приватными: сотрудник видит только свои (см. /api/leave).
+            return Results.Ok(all);
         })
    .RequireAuthorization("AuthenticatedOnly")
    .WithName("GetUsers")

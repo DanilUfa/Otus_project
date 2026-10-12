@@ -32,8 +32,19 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
-// --- SPA static root: wwwroot каталога проекта Web (детерминированно, независимо от рабочего каталога запуска) ---
-builder.WebHost.UseWebRoot(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "wwwroot"));
+// --- SPA static root: wwwroot каталога проекта Web ---
+// В dev (dotnet run) папка лежит в каталоге проекта (bin/Debug/net10.0/../../..),
+// в publish/контейнере — рядом с точкой входа (/app/wwwroot). Берём существующий,
+// чтобы раздача SPA работала и в dev, и в опубликованной сборке.
+var webRootCandidates = new[]
+{
+    Path.Combine(AppContext.BaseDirectory, "wwwroot"),                  // publish / контейнер
+    Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "wwwroot") // dotnet run (dev)
+};
+var webRoot = webRootCandidates.FirstOrDefault(Directory.Exists)
+    ?? throw new InvalidOperationException(
+        "Каталог wwwroot не найден. Кандидаты: " + string.Join(", ", webRootCandidates));
+builder.WebHost.UseWebRoot(webRoot);
 
 // --- Swagger (Swashbuckle) ---
 builder.Services.AddEndpointsApiExplorer();

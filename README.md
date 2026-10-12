@@ -66,6 +66,13 @@ npm --prefix src/VacationPlanner.Web/ClientApp run dev
 
 Корпоративная SSL-проверка (прокси): внутри linux-контейнера нет вашего корневого CA, поэтому `dotnet restore` из `api.nuget.org` не доверяет TLS.
 
+**Решение для Docker-сборки (проверено):** Dockerfile'ы принимают build-arg `NUGET_CA_B64` (base64 PEM-цепочки хостового CA; в чистой сети аргумент пуст и ничего не делает). Извлечь цепочку и собрать:
+```powershell
+node -e "const h=require('https'),f=require('fs');h.get({host:'api.nuget.org',path:'/',rejectUnauthorized:false},r=>{const c=r.socket.getPeerCertificate(true);let a=[],x=c;while(x){a.push('-----BEGIN CERTIFICATE-----\n'+x.raw.toString('base64').match(/.{1,64}/g).join('\n')+'\n-----END CERTIFICATE-----');x=x.issuerCertificate&&x.issuerCertificate.fingerprint!==x.fingerprint?x.issuerCertificate:null}f.writeFileSync('ca.b64',Buffer.from(a.join('\n')).toString('base64'))}).on('error',e=>{console.error(e);process.exit(1)})"
+docker-compose build --build-arg NUGET_CA_B64=(Get-Content ca.b64 -Raw).Trim()
+docker-compose up -d
+```
+
 **Быстрый путь (приложение на хосте, инфраструктура в Docker):**
 ```powershell
 docker compose up -d postgres redis rabbitmq

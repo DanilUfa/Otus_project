@@ -1,6 +1,10 @@
 # построено в multi-stage: publish + runtime
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
+# Корпоративный/локальный CA (TLS-перехват сети): передаётся в build-arg NUGET_CA_B64 (base64 PEM).
+# В чистой сети аргумент пуст — шаг ничего не делает.
+ARG NUGET_CA_B64=""
+RUN if [ -n "$NUGET_CA_B64" ]; then echo "$NUGET_CA_B64" | base64 -d > /usr/local/share/ca-certificates/host-ca.crt && chmod 644 /usr/local/share/ca-certificates/host-ca.crt && update-ca-certificates; fi
 COPY . .
 RUN dotnet publish src/VacationPlanner.Scheduler -c Release -o /app/out
 

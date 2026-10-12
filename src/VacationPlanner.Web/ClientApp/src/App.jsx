@@ -8,6 +8,7 @@ const MONTHS = [
   'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'
 ];
 const YEAR = new Date().getFullYear();
+const pd = (s) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
 
 export default function App() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || 'null'));
@@ -233,25 +234,32 @@ function LeaveTable({ leaves, myUserId, isManager, onAction }) {
 function YearCalendar() {
   const raw = sessionStorage.getItem('leaves');
   const usersRaw = sessionStorage.getItem('users');
+  const [year, setYear] = useState(new Date().getFullYear());
   if (!raw || !usersRaw) return <section><h2>Годовой график отпусков</h2><div className="dim">Нет данных для графика.</div></section>;
 
   const leaves = JSON.parse(raw);
   const users = JSON.parse(usersRaw);
 
-  // попадает ли заявка в месяц m (1..12)
-  const inMonth = (l, m) => {
-    const s = new Date(l.startDate), e = new Date(l.endDate);
-    for (let d = new Date(s); d <= e; d.setMonth(d.getMonth() + 1)) {
-      if (d.getMonth() + 1 === m) return true;
+  // попадает ли заявка в месяц m (1..12) именно выбранного года
+  const inMonth = (l, y, m) => {
+    const s = pd(l.startDate), e = pd(l.endDate);
+    for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+      if (d.getFullYear() === y && d.getMonth() + 1 === m) return true;
     }
     return false;
   };
   // допускаются только согласованные (status 2) — как реальный график
   const approved = leaves.filter((l) => l.status === 2);
+  const yearsAll = [year - 1, year, year + 1];
 
   return (
     <section>
-      <h2>Годовой график отпусков · {YEAR}</h2>
+      <h2>Годовой график отпусков · {year}</h2>
+      <div className="y-legend">
+        {yearsAll.map((y) => (
+          <button key={y} className={'ghost sm' + (y === year ? ' on' : '')} onClick={() => setYear(y)}>{y}</button>
+        ))}
+      </div>
       <table className="cal">
         <thead><tr><th>Сотрудник</th>{MONTHS.map((m) => <th key={m}>{m}</th>)}</tr></thead>
         <tbody>
@@ -259,9 +267,9 @@ function YearCalendar() {
             <tr key={u.id}>
               <td>{u.name}</td>
               {MONTHS.map((_, i) => {
-                const hits = approved.filter((l) => l.userId === u.id && inMonth(l, i + 1));
+                const hits = approved.filter((l) => l.userId === u.id && inMonth(l, year, i + 1));
                 return (
-                  <td key={i} className={hits.length ? 'cal-yes' : ''} title={hits.map((h) => `${h.startDate.slice(5, 10)}..${h.endDate.slice(5, 10)}`).join('\n')}>
+                  <td key={i} className={hits.length ? 'cal-yes' : ''} title={hits.map((h) => `${h.startDate.slice(0, 10)}..${h.endDate.slice(0, 10)}`).join('\n')}>
                     {hits.length ? '▉' : ''}
                   </td>
                 );
@@ -274,3 +282,4 @@ function YearCalendar() {
     </section>
   );
 }
+

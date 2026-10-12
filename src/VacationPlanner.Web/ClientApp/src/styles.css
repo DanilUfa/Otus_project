@@ -148,3 +148,6 @@ button.sm { padding: 4px 10px; font-size: 12px; }
 .days .marks { position: absolute; bottom: 2px; left: 3px; right: 3px; display: flex; gap: 2px; align-items: center; overflow: hidden; }
 .days .mdot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(255,255,255,.8); }
 .days .marks em { font-style: normal; font-size: 9px; color: var(--muted); }
+
+/* Активный год в календарях */
+.ghost.sm.on, .ghost.on { background: #2563eb; color: #fff; border-color: #2563eb; }

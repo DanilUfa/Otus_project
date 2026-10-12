@@ -110,38 +110,73 @@ function Data({ getter, k, render }) {
 }
 
 /* ----------  Вход ---------- */
+// Демо-аккаунты для быстрого входа одним кликом (демо-пароли).
+const DEMO_ACCOUNTS = [
+  { name: 'Иван Менеджер', role: 'Manager',   email: 'manager@vac.local', password: 'Manager123!' },
+  { name: 'Пётр Сотрудник', role: 'Employee',  email: 'petr@vac.local', password: 'User123!' },
+  { name: 'Мария Бухгалтер', role: 'Employee', email: 'maria@vac.local', password: 'User123!' },
+  { name: 'Алексей Инженер', role: 'Employee', email: 'alex@vac.local', password: 'User123!' },
+];
+
 function Login({ onLogin }) {
   const [email, setEmail] = useState('petr@vac.local');
   const [password, setPassword] = useState('User123!');
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState('');
+
+  async function signIn(u, e) {
+    e && e.preventDefault();
+    try {
+      const acc = await api.login(u.email, u.password);
+      localStorage.setItem('token', acc.token);
+      localStorage.setItem('refreshToken', acc.refreshToken);
+      localStorage.setItem('user', JSON.stringify(acc));
+      onLogin(acc);
+    } catch (e2) { setErr(e2.message); setBusy(''); }
+  }
 
   async function submit(e) {
     e.preventDefault();
     setErr('');
-    try {
-      const u = await api.login(email, password);
-      localStorage.setItem('token', u.token);
-      localStorage.setItem('refreshToken', u.refreshToken);
-      localStorage.setItem('user', JSON.stringify(u));
-      onLogin(u);
-    } catch (e) { setErr(e.message); }
+    await signIn({ email, password });
+  }
+
+  async function quick(acc) {
+    setErr('');
+    setBusy(acc.name);
+    await signIn(acc);
   }
 
   return (
-    <form className="card login" onSubmit={submit}>
-      <h2>Вход в систему</h2>
-      <label>Email
-        <input value={email} onChange={(e) => setEmail(e.target.value)} />
-      </label>
-      <label>Пароль
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-      </label>
-      {err && <div className="error">{err}</div>}
-      <div className="row">
-        <button>Войти</button>
-        <a href="/swagger" target="_blank" rel="noreferrer">Swagger API</a>
+    <div className="login-wrap">
+      <form className="card login" onSubmit={submit}>
+        <h2>Вход в систему</h2>
+        <label>Email
+          <input value={email} onChange={(e) => setEmail(e.target.value)} />
+        </label>
+        <label>Пароль
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+        {err && <div className="error">{err}</div>}
+        <div className="row">
+          <button disabled={!!busy}>Войти</button>
+          <a href="/swagger" target="_blank" rel="noreferrer">Swagger API</a>
+        </div>
+      </form>
+
+      <div className="card login quick">
+        <h3>Быстрый вход (демо)</h3>
+        <p className="dim">Один клик по аккаунту — пароль вводить не нужно.</p>
+        {DEMO_ACCOUNTS.map((a) => (
+          <button key={a.email} className={'acc role-' + (a.role === 'Manager' ? 'mgr' : 'emp')}
+            disabled={!!busy} onClick={() => quick(a)}>
+            <b>{a.name}</b>
+            <span>{a.role === 'Manager' ? 'Руководитель' : 'Сотрудник'}</span>
+            {busy === a.name && <em>Вход…</em>}
+          </button>
+        ))}
       </div>
-    </form>
+    </div>
   );
 }
 

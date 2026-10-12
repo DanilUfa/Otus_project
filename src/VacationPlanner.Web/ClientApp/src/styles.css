@@ -151,3 +151,16 @@ button.sm { padding: 4px 10px; font-size: 12px; }
 
 /* Активный год в календарях */
 .ghost.sm.on, .ghost.on { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+/* Быстрый вход (демо) */
+.login-wrap { display: flex; gap: 16px; align-items: flex-start; justify-content: center; flex-wrap: wrap; padding-top: 24px; }
+.login-wrap .card { min-width: 300px; }
+.quick h3 { margin: 0 0 4px; }
+.quick p { margin: 0 0 10px; }
+.acc { display: flex; align-items: center; gap: 10px; width: 100%; margin-bottom: 8px; padding: 10px 12px; border: 1px solid #d7deea; border-radius: 8px; background: #fff; cursor: pointer; text-align: left; }
+.acc:hover { border-color: #2563eb; }
+.acc b { flex: 1; font-size: 14px; }
+.acc span { color: #64748b; font-size: 12px; }
+.acc em { font-style: normal; color: #2563eb; font-size: 12px; }
+.acc.role-mgr { border-left: 4px solid #2563eb; }
+.acc.role-emp { border-left: 4px solid #0d9488; }

@@ -4,8 +4,7 @@ C# / .NET 10 · ASP.NET Core Minimal API · PostgreSQL · EF Core · MassTransit
 
 ## Шаблоны проектирования (что реализовано в коде)
 
-> Список — из программы курса. Ниже только те, что **есть в коде**, с указанием классов —
-> чтобы на защите можно было показать точное место.
+> Ниже — только те паттерны, что **есть в коде**, с указанием классов.
 
 | # | Паттерн | Группа | Где в коде | Что даёт |
 |---|---------|--------|-----------|----------|
@@ -17,7 +16,7 @@ C# / .NET 10 · ASP.NET Core Minimal API · PostgreSQL · EF Core · MassTransit
 | 6 | **Singleton** | создание | `BalanceGate`, `VacationMetrics` — регистрации `AddSingleton` в DI | одно общее состояние (per-user async-замок; счётчики метрик) |
 | 7 | **State** | поведение | `Application/Patterns/LeaveState.cs` + use в `LeaveService` | жизненный цикл заявки: объекты-состояния запрещают нелегальные переходы (например, нельзя утвердить уже отклонённую) |
 
-### Как объяснить **Observer + Mediator** на защите
+### Как устроены **Observer + Mediator** (по коду)
 - **Издатель** (API в `LeaveService`) после сохранения заявки вызывает `IPublishEndpoint.Publish(...)`.
 - **Подписчики** (notifier/audit/reporting: `*Consumer`) сами не знают про издателя — регистрируются в `AddMassTransit` в каждом сервисе.
 - Транспорт (RabbitMQ) — это и есть медиатор: продюсер и консьюмер связаны только контрактом сообщения, а не кодом.
@@ -27,7 +26,7 @@ C# / .NET 10 · ASP.NET Core Minimal API · PostgreSQL · EF Core · MassTransit
 - `SemaphoreSlim` (`BalanceGate.LockAsync`) — **примитив синхронизации** (асинхронный замок на пользователя, защищает пересчёт баланса от гонок).
 - **Repository + DI** — изоляция доступа к данным за интерфейсами (`ILeaveRepository`, `IUserRepository`).
 
-> Честная заметка для защиты: `Decorator`/`Memento`, Keycloak, Kafka — в **роадмапе** (см. `ARCHITECTURE.md`), в этом MVP не реализованы.
+> Примечание: `Decorator`/`Memento`, Keycloak, Kafka — в **роадмапе**, в этом MVP не реализованы.
 
 ## Быстрый запуск одной командой (Docker)
 

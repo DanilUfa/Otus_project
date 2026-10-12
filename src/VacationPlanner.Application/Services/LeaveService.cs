@@ -1,4 +1,4 @@
-using MassTransit;
+using System.Text.Json;
 using VacationPlanner.Application.Contracts;
 using VacationPlanner.Application.Metrics;
 using VacationPlanner.Application.Patterns;
@@ -10,12 +10,14 @@ namespace VacationPlanner.Application.Services;
 
 /// <summary>
 /// Юз-кейсы работы с заявками на отпуск.
-/// Сохраняет заявку и публикует событие в шину (MassTransit) для фоновой обработки.
+/// Сохраняет заявку и кладёт событие в transaction outbox (та же транзакция):
+/// фоновый отправитель публикует его в шину (MassTransit) для reporting/audit/notifier.
 /// </summary>
 public class LeaveService(
     ILeaveRepository leaveRepository,
     IUserRepository userRepository,
-    IPublishEndpoint publishEndpoint,
+    IOutboxRepository outbox,
+    IUnitOfWork unitOfWork,
     VacationMetrics metrics,
     IRealtimeNotifier realtime)
 {
@@ -36,11 +38,14 @@ public class LeaveService(
         leaveRequest.Status = LeaveStatus.Submitted; // Draft → Submitted
         LeaveState.For(LeaveStatus.Draft).EnsureCanTransitionTo(leaveRequest.Status);
 
-        await leaveRepository.AddAsync(leaveRequest, ct);
-        await leaveRepository.SaveAsync(ct);
+        await unitOfWork.BeginAsync(ct);
+        try
+        {
+            await leaveRepository.AddAsync(leaveRequest, ct);
+            await leaveRepository.SaveAsync(ct); // Id заявки присваивается здесь (в транзакции)
 
-        await publishEndpoint.Publish(
-            new LeaveRequestSubmitted(
+            // Событие строится с настоящим Id и кладётся в outbox той же транзакцией.
+            var submitted = new LeaveRequestSubmitted(
                 leaveRequest.Id,
                 leaveRequest.UserId,
                 user.Name,
@@ -49,8 +54,17 @@ public class LeaveService(
                 leaveRequest.EndDate,
                 leaveRequest.CreatedAt,
                 user.Email,
-                user.Manager?.Email ?? ""),
-            ct);
+                user.Manager?.Email ?? "");
+            await outbox.AddAsync(NewOutbox(submitted), ct);
+            await leaveRepository.SaveAsync(ct);
+
+            await unitOfWork.CommitAsync(ct);
+        }
+        catch (Exception)
+        {
+            await unitOfWork.RollbackAsync(ct);
+            throw;
+        }
 
         metrics.LeavesSubmitted.Add(1);
 
@@ -76,14 +90,14 @@ public class LeaveService(
 
         var owner = await userRepository.GetByIdWithManagerAsync(lr.UserId, ct);
 
-        lr.Status = LeaveStatus.Submitted;
-        await leaveRepository.SaveAsync(ct);
+        var submitted = new LeaveRequestSubmitted(lr.Id, lr.UserId, owner?.Name ?? $"User {lr.UserId}",
+            lr.Type, lr.StartDate, lr.EndDate, lr.CreatedAt,
+            owner?.Email ?? "", owner?.Manager?.Email ?? "");
 
-        await publishEndpoint.Publish(
-            new LeaveRequestSubmitted(lr.Id, lr.UserId, owner?.Name ?? $"User {lr.UserId}",
-                lr.Type, lr.StartDate, lr.EndDate, lr.CreatedAt,
-                owner?.Email ?? "", owner?.Manager?.Email ?? ""),
-            ct);
+        lr.Status = LeaveStatus.Submitted;
+        await outbox.AddAsync(NewOutbox(submitted), ct);
+        await leaveRepository.SaveAsync(ct); // одна транзакция: заявка + событие
+
         metrics.LeavesSubmitted.Add(1);
 
         var dto = ToDto(lr, owner?.Name ?? $"User {lr.UserId}", owner?.ManagerId);
@@ -101,16 +115,16 @@ public class LeaveService(
             throw new UnauthorizedAccessException("Отменить может только автор заявки.");
 
         LeaveState.For(lr.Status).EnsureCanTransitionTo(LeaveStatus.Cancelled);
-        lr.Status = LeaveStatus.Cancelled;
-        await leaveRepository.SaveAsync(ct);
 
-        // Отмена — тоже изменение статуса: уведомляем шину (reporting уберёт строку
-        // из read-модели, audit запишет историю) и realtime-подписчиков.
-        var owner2 = await userRepository.GetByIdAsync(lr.UserId, ct);
-        await publishEndpoint.Publish(
-            new LeaveRequestStatusChanged(lr.Id, lr.UserId, LeaveStatus.Cancelled,
-                lr.StartDate, lr.EndDate, owner2?.Email ?? ""),
-            ct);
+        // Отмена — тоже изменение статуса: reporting уберёт строку read-модели,
+        // audit запишет историю (через outbox, та же транзакция).
+        var owner = await userRepository.GetByIdAsync(lr.UserId, ct);
+        var cancelled = new LeaveRequestStatusChanged(lr.Id, lr.UserId, LeaveStatus.Cancelled,
+            lr.StartDate, lr.EndDate, owner?.Email ?? "");
+
+        lr.Status = LeaveStatus.Cancelled;
+        await outbox.AddAsync(NewOutbox(cancelled), ct);
+        await leaveRepository.SaveAsync(ct); // одна транзакция: статус + событие
         try { await realtime.NotifyStatusChangedAsync(lr.Id, LeaveStatus.Cancelled.ToString(), lr.UserId, ct); } catch { }
     }
 
@@ -147,17 +161,14 @@ public class LeaveService(
         // State: запрещаем нелегальные переходы (например, утвердить уже отклонённую/не поданную).
         LeaveState.For(lr.Status).EnsureCanTransitionTo(newStatus);
 
+        var changed = new LeaveRequestStatusChanged(lr.Id, lr.UserId, newStatus, lr.StartDate, lr.EndDate, owner.Email);
+
         lr.Status = newStatus;
-        await leaveRepository.SaveAsync(ct);
+        await outbox.AddAsync(NewOutbox(changed), ct);
+        await leaveRepository.SaveAsync(ct); // одна транзакция: статус + событие
 
         if (newStatus == LeaveStatus.Approved) metrics.LeavesApproved.Add(1);
         else if (newStatus == LeaveStatus.Declined) metrics.LeavesDeclined.Add(1);
-
-        // Уведомляем сотрудника об утверждении/отклонении (notifier шлёт email).
-        await publishEndpoint.Publish(
-            new LeaveRequestStatusChanged(
-                lr.Id, lr.UserId, newStatus, lr.StartDate, lr.EndDate, owner.Email),
-            ct);
 
         // Realtime: владельцу заявки (best-effort).
         try { await realtime.NotifyStatusChangedAsync(lr.Id, newStatus.ToString(), lr.UserId, ct); } catch { }
@@ -204,6 +215,13 @@ public class LeaveService(
         if (conflict)
             throw new DomainValidationException("Период пересекается с уже поданной или утверждённой заявкой.");
     }
+
+    /// <summary>Обёртка события в outbox-сообщение (JSON как в published-сообщение MassTransit).</summary>
+    private static OutboxMessage NewOutbox(object evt) => new()
+    {
+        Type = evt.GetType().Name,
+        Payload = JsonSerializer.Serialize(evt),
+    };
 
     private static LeaveRequestDto ToDto(LeaveRequest r, string userName, int? managerId = null) => new(
         r.Id,

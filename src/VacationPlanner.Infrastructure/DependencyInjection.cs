@@ -20,6 +20,8 @@ public static class DependencyInjection
         services.AddScoped<ILeaveRepository, LeaveRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IOutboxRepository, OutboxRepository>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Security
         services.AddScoped<IPasswordHasher, PasswordHasher>();

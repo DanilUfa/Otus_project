@@ -93,6 +93,9 @@ builder.Services.AddMassTransit(x =>
 });
 
 // --- SignalR (realtime) ---
+// --- Transaction outbox: фоновый отправитель событий в шину ---
+builder.Services.AddHostedService<OutboxPublisherHostedService>();
+
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IRealtimeNotifier, RealtimeNotifier>();
 builder.Services.AddSingleton<LoginThrottle>();

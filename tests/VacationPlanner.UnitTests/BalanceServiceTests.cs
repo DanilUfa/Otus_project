@@ -7,7 +7,8 @@ using VacationPlanner.UnitTests.Fakes;
 namespace VacationPlanner.UnitTests;
 
 /// <summary>
-/// Расчёт остатка: только Approved + Annual, дни включительно
+/// Расчёт остатка: Annual в статусе Submitted или Approved резервирует дни
+/// (нельзя взять отпуск сверх лимита, пока заявка на согласовании), дни включительно
 /// (Days = (EndDate - StartDate).Days + 1), результат клампится к 0.
 /// Окно года (overlap) отдаёт репозиторий — фабрики проверяют границы.
 /// </summary>
@@ -41,20 +42,49 @@ public class BalanceServiceTests
     }
 
     [Fact]
-    public async Task Only_approved_annual_leaves_reduce_balance()
+    public async Task Submitted_and_approved_annual_reserve_balance()
     {
         var (repo, svc) = New();
         repo.Items.AddRange(new[]
         {
             Leaf(1, 1, LeaveStatus.Draft,     LeaveType.Annual, "2026-06-01", "2026-06-05"),
-            Leaf(2, 1, LeaveStatus.Submitted, LeaveType.Annual, "2026-06-01", "2026-06-05"),
+            Leaf(2, 1, LeaveStatus.Submitted, LeaveType.Annual, "2026-06-01", "2026-06-05"), // резервирует 5
             Leaf(3, 1, LeaveStatus.Declined,  LeaveType.Annual, "2026-06-01", "2026-06-05"),
             Leaf(4, 1, LeaveStatus.Cancelled, LeaveType.Annual, "2026-06-01", "2026-06-05"),
             Leaf(5, 1, LeaveStatus.Approved,  LeaveType.Sick,   "2026-06-01", "2026-06-05"),
             Leaf(6, 1, LeaveStatus.Approved,  LeaveType.Unpaid, "2026-06-01", "2026-06-05"),
             Leaf(7, 1, LeaveStatus.Approved,  LeaveType.Annual, "2026-08-03", "2026-08-10"), // 8 дн
         });
-        Assert.Equal(BalanceService.DefaultAnnualDays - 8, await svc.GetRemainingAnnualDaysAsync(1, 2026));
+        Assert.Equal(BalanceService.DefaultAnnualDays - 13, await svc.GetRemainingAnnualDaysAsync(1, 2026));
+    }
+
+    [Fact]
+    public async Task Submitted_alone_reserves_days()
+    {
+        var (repo, svc) = New();
+        repo.Items.Add(Leaf(1, 1, LeaveStatus.Submitted, LeaveType.Annual, "2026-07-06", "2026-07-10"));
+        Assert.Equal(BalanceService.DefaultAnnualDays - 5, await svc.GetRemainingAnnualDaysAsync(1, 2026));
+    }
+
+    [Fact]
+    public async Task Submitted_clamps_at_zero()
+    {
+        var (repo, svc) = New();
+        // «На рассмотрении» на 30 дней уже не оставляет места — остаток не уходит в минус.
+        repo.Items.Add(Leaf(1, 1, LeaveStatus.Submitted, LeaveType.Annual, "2026-05-01", "2026-05-30"));
+        Assert.Equal(0, await svc.GetRemainingAnnualDaysAsync(1, 2026));
+    }
+
+    [Fact]
+    public async Task Declined_leaves_release_reserved_days()
+    {
+        var (repo, svc) = New();
+        repo.Items.AddRange(new[]
+        {
+            Leaf(1, 1, LeaveStatus.Submitted, LeaveType.Annual, "2026-06-01", "2026-06-05"), // резервирует 5
+            Leaf(2, 1, LeaveStatus.Declined,  LeaveType.Annual, "2026-07-01", "2026-07-10"), // не резервирует
+        });
+        Assert.Equal(BalanceService.DefaultAnnualDays - 5, await svc.GetRemainingAnnualDaysAsync(1, 2026));
     }
 
     [Fact]

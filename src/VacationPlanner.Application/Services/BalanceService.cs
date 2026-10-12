@@ -24,15 +24,18 @@ public class BalanceService(ILeaveRepository leaveRepository, BalanceGate gate)
 
         // Дни учитываются ТОЛЬКО в пределах запрашиваемого года: отпуск через границу
         // (25.12–05.01) не задваивается — в каждый год попадает своя часть периода.
+        // «На рассмотрении» тоже резервирует дни: нельзя набрать заявок больше лимита
+        // и «для себя» пересечься с сотрудником, чей отпуск ещё согласовывается.
         var used = requests
-            .Where(r => r.Type == LeaveType.Annual && r.Status == LeaveStatus.Approved)
+            .Where(r => r.Type == LeaveType.Annual &&
+                        r.Status is LeaveStatus.Approved or LeaveStatus.Submitted)
             .Sum(r => DaysWithinYear(r.StartDate.Date, r.EndDate.Date, year));
 
         return Math.Max(0, DefaultAnnualDays - used);
     }
 
     /// <summary>Число дней отпуска, приходящееся на указанный год (пересечение периода с годом).</summary>
-    private static int DaysWithinYear(DateTime start, DateTime end, int year)
+    internal static int DaysWithinYear(DateTime start, DateTime end, int year)
     {
         var yearStart = new DateTime(year, 1, 1);
         var yearEnd = new DateTime(year, 12, 31);

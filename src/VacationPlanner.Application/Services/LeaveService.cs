@@ -199,7 +199,8 @@ public class LeaveService(
     /// <summary>
     /// Бизнес-правила перед отправкой на согласование:
     /// ежегодный отпуск нельзя подавать задним числом; период не должен пересекаться
-    /// с уже поданной (Submitted) или утверждённой (Approved) заявкой этого сотрудника.
+    /// с уже поданной (Submitted) или утверждённой (Approved) заявкой этого сотрудника;
+    /// ежегодный отпуск не должен выходить за годовой лимит (Submitted+Approved резервируют дни).
     /// </summary>
     private async Task EnsureCanSubmitAsync(int userId, LeaveType type, DateTime start, DateTime end, CancellationToken ct)
     {
@@ -214,6 +215,23 @@ public class LeaveService(
             r.StartDate.Date <= end.Date && r.EndDate.Date >= start.Date);
         if (conflict)
             throw new DomainValidationException("Период пересекается с уже поданной или утверждённой заявкой.");
+
+        // Годовой лимит: дни «на рассмотрении» и утверждённые резервируют место.
+        // Проверяем по каждому году, которого касается заявка (в т.ч. переходящей через границу).
+        if (type == LeaveType.Annual)
+        {
+            for (var y = start.Year; y <= end.Year; y++)
+            {
+                var used = existing
+                    .Where(r => r.Type == LeaveType.Annual &&
+                                r.Status is LeaveStatus.Approved or LeaveStatus.Submitted)
+                    .Sum(r => BalanceService.DaysWithinYear(r.StartDate.Date, r.EndDate.Date, y));
+                var requested = BalanceService.DaysWithinYear(start.Date, end.Date, y);
+                if (used + requested > BalanceService.DefaultAnnualDays)
+                    throw new DomainValidationException(
+                        $"Превышен годовой лимит отпуска ({BalanceService.DefaultAnnualDays} дн.) — в {y} г. занято {used} дн., свободно {Math.Max(0, BalanceService.DefaultAnnualDays - used)} дн.");
+            }
+        }
     }
 
     /// <summary>Обёртка события в outbox-сообщение (JSON как в published-сообщение MassTransit).</summary>

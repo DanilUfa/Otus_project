@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using VacationPlanner.Audit.Consumers;
+using System.Security.Claims;
 using VacationPlanner.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -81,9 +82,19 @@ app.MapGet("/health/ready", async (AuditDbContext db, CancellationToken ct) =>
 app.MapGet("/api/info", () => Results.Ok(ServiceInfo()));
 
 // История операций над заявками (bounded-контекст аудита, своя БД).
-app.MapGet("/api/audit", async (int? requestId, int? userId, int? limit, AuditDbContext db, CancellationToken ct) =>
+app.MapGet("/api/audit", async (int? requestId, int? userId, int? limit, ClaimsPrincipal user, AuditDbContext db, CancellationToken ct) =>
 {
     var q = db.AuditLogs.AsNoTracking().AsQueryable();
+
+    // Сотрудник видит ТОЛЬКО свои операции; вся история доступна руководителю/админу.
+    var role = user.FindFirst(ClaimTypes.Role)?.Value;
+    var ownId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    if (role is not ("Manager" or "Admin"))
+    {
+        q = q.Where(a => a.UserId == ownId);
+        userId = ownId; // параметр userId для сотрудника бессмыслен — снижается до него самого
+    }
+
     if (requestId.HasValue) q = q.Where(a => a.RequestId == requestId.Value);
     if (userId.HasValue) q = q.Where(a => a.UserId == userId.Value);
     q = q.OrderByDescending(a => a.CreatedAt);

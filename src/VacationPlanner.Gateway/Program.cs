@@ -118,9 +118,6 @@ static bool IsHopByHop(string name)
 
 static async Task ProxyHttpAsync(HttpContext ctx, Uri target, CancellationToken ct)
 {
-    using var client = new HttpClient();
-    client.Timeout = Timeout.InfiniteTimeSpan;
-
     using var upstream = new HttpRequestMessage(new HttpMethod(ctx.Request.Method), new Uri(target, PathAndQuery(ctx)));
 
     // Content-заголовки (Content-Type и т.п.) должны попасть на HttpContent, а не в request headers:
@@ -137,7 +134,7 @@ static async Task ProxyHttpAsync(HttpContext ctx, Uri target, CancellationToken 
             upstream.Content?.Headers.TryAddWithoutValidation(h.Key, (IEnumerable<string>)h.Value);
     }
 
-    using var resp = await client.SendAsync(upstream, HttpCompletionOption.ResponseHeadersRead, ct);
+    using var resp = await GatewayProxy.Http.SendAsync(upstream, HttpCompletionOption.ResponseHeadersRead, ct);
 
     ctx.Response.StatusCode = (int)resp.StatusCode;
     // Hop-by-hop заголовки (Transfer-Encoding/Connection/Keep-Alive и т.д.) НЕ копируем:
@@ -184,4 +181,18 @@ static async Task PumpAsync(WebSocket from, WebSocket to, CancellationToken ct)
         }
     }
     catch { /* best-effort duplex */ }
+}
+
+/// <summary>Общий HTTP-клиент прокси: пул соединений + лимит жизни, чтобы не плодить сокеты.</summary>
+static class GatewayProxy
+{
+    public static readonly HttpClient Http = new(new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        UseCookies = false,
+        AllowAutoRedirect = false,
+    })
+    {
+        Timeout = Timeout.InfiniteTimeSpan,
+    };
 }

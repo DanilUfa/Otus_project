@@ -1,5 +1,5 @@
-// Офлайн-двойник UnitTests: те же сценарии без внешних пакетов (nuget.org недоступен в этой
-// сети). Реальный каркас: tests/VacationPlanner.UnitTests (xUnit).
+// Офлайн-двойник UnitTests: те же сценарии без внешних пакетов - прогон без restore/сети.
+// (При этом nuget.org в этой сети ДОСТУПЕН; основной каркас - tests/VacationPlanner.UnitTests, xUnit.)
 using VacationPlanner.Application.Patterns;
 using VacationPlanner.Application.Services;
 using VacationPlanner.Domain;

@@ -25,7 +25,10 @@ public static class EnsureDatabase
             probe.Parameters.AddWithValue("db", dbName);
             if (probe.ExecuteScalar() is null)
             {
-                using var create = new NpgsqlCommand("CREATE DATABASE " + dbName, admin);
+                // Имя БД экранируется: конкатенация в CREATE DATABASE без кавычек ломала бы
+                // имена с пробелами/дефисами и допускала SQL-инъекцию через имя БД.
+                var escaped = dbName.Replace("\"", "\"\"");
+                using var create = new NpgsqlCommand("CREATE DATABASE \"" + escaped + "\"", admin);
                 create.ExecuteNonQuery();
             }
         }

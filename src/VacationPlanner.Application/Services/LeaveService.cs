@@ -22,7 +22,9 @@ public class LeaveService(
     public async Task<LeaveRequestDto> SubmitAsync(CreateLeaveRequestRequest request, CancellationToken ct = default)
     {
         var user = await userRepository.GetByIdWithManagerAsync(request.UserId, ct)
-            ?? throw new InvalidOperationException($"Пользователь {request.UserId} не найден.");
+            ?? throw new NotFoundException($"Пользователь {request.UserId} не найден.");
+
+        await EnsureCanSubmitAsync(request.UserId, request.Type, request.StartDate, request.EndDate, ct);
 
         var leaveRequest = new LeaveRequestBuilder()
             .ForUser(request.UserId)
@@ -63,12 +65,14 @@ public class LeaveService(
     public async Task<LeaveRequestDto> SubmitDraftAsync(int id, int userId, CancellationToken ct = default)
     {
         var lr = await leaveRepository.GetByIdAsync(id, ct)
-            ?? throw new InvalidOperationException($"Заявка {id} не найдена.");
+            ?? throw new NotFoundException($"Заявка {id} не найдена.");
         if (lr.UserId != userId)
             throw new UnauthorizedAccessException("Отправить черновик может только его автор.");
 
         // State: Draft → Submitted (нелегальные переходы запрещены).
         LeaveState.For(lr.Status).EnsureCanTransitionTo(LeaveStatus.Submitted);
+
+        await EnsureCanSubmitAsync(lr.UserId, lr.Type, lr.StartDate, lr.EndDate, ct);
 
         var owner = await userRepository.GetByIdWithManagerAsync(lr.UserId, ct);
 
@@ -92,7 +96,7 @@ public class LeaveService(
     public async Task CancelAsync(int id, int userId, CancellationToken ct = default)
     {
         var lr = await leaveRepository.GetByIdAsync(id, ct)
-            ?? throw new InvalidOperationException($"Заявка {id} не найдена.");
+            ?? throw new NotFoundException($"Заявка {id} не найдена.");
         if (lr.UserId != userId)
             throw new UnauthorizedAccessException("Отменить может только автор заявки.");
 
@@ -114,7 +118,7 @@ public class LeaveService(
     public async Task<int> SaveDraftAsync(CreateLeaveRequestRequest request, CancellationToken ct = default)
     {
         var user = await userRepository.GetByIdAsync(request.UserId, ct)
-            ?? throw new InvalidOperationException($"Пользователь {request.UserId} не найден.");
+            ?? throw new NotFoundException($"Пользователь {request.UserId} не найден.");
 
         var draft = new LeaveRequestBuilder()
             .ForUser(request.UserId)
@@ -131,10 +135,10 @@ public class LeaveService(
     public async Task UpdateStatusAsync(int id, LeaveStatus newStatus, int approverUserId, CancellationToken ct = default)
     {
         var lr = await leaveRepository.GetByIdAsync(id, ct)
-            ?? throw new InvalidOperationException($"Заявка {id} не найдена.");
+            ?? throw new NotFoundException($"Заявка {id} не найдена.");
 
         var owner = await userRepository.GetByIdAsync(lr.UserId, ct)
-            ?? throw new InvalidOperationException($"Сотрудник заявки {id} не найден.");
+            ?? throw new NotFoundException($"Сотрудник заявки {id} не найден.");
 
         // Только непосредственный руководитель сотрудника утверждает/отклоняет.
         if (owner.ManagerId != approverUserId)
@@ -179,6 +183,26 @@ public class LeaveService(
             .Where(r => r.UserId == userId)
             .Select(r => ToDto(r, names.GetValueOrDefault(r.UserId) ?? $"User {r.UserId}"))
             .ToList();
+    }
+
+    /// <summary>
+    /// Бизнес-правила перед отправкой на согласование:
+    /// ежегодный отпуск нельзя подавать задним числом; период не должен пересекаться
+    /// с уже поданной (Submitted) или утверждённой (Approved) заявкой этого сотрудника.
+    /// </summary>
+    private async Task EnsureCanSubmitAsync(int userId, LeaveType type, DateTime start, DateTime end, CancellationToken ct)
+    {
+        if (type == LeaveType.Annual && start.Date < DateTime.UtcNow.Date)
+            throw new DomainValidationException("Ежегодный отпуск нельзя подавать задним числом.");
+
+        var from = new DateTime(start.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var to = new DateTime(end.Year, 12, 31, 0, 0, 0, DateTimeKind.Utc);
+        var existing = await leaveRepository.GetByUserInRangeAsync(userId, from, to, ct);
+        var conflict = existing.Any(r =>
+            r.Status is LeaveStatus.Submitted or LeaveStatus.Approved &&
+            r.StartDate.Date <= end.Date && r.EndDate.Date >= start.Date);
+        if (conflict)
+            throw new DomainValidationException("Период пересекается с уже поданной или утверждённой заявкой.");
     }
 
     private static LeaveRequestDto ToDto(LeaveRequest r, string userName, int? managerId = null) => new(

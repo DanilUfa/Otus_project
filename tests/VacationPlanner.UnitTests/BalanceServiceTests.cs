@@ -109,11 +109,22 @@ public class BalanceServiceTests
     }
 
     [Fact]
-    public async Task Leaf_spanning_year_boundary_is_counted_in_both_years()
+    public async Task Leaf_spanning_year_boundary_counts_only_days_within_each_year()
     {
         var (repo, svc) = New();
-        repo.Items.Add(Leaf(1, 1, LeaveStatus.Approved, LeaveType.Annual, "2026-12-30", "2027-01-02")); // 4 дня
-        Assert.Equal(BalanceService.DefaultAnnualDays - 4, await svc.GetRemainingAnnualDaysAsync(1, 2026));
-        Assert.Equal(BalanceService.DefaultAnnualDays - 4, await svc.GetRemainingAnnualDaysAsync(1, 2027));
+        // 30.12.2026–02.01.2027 = 4 дня: в 2026 попадают 2 (30, 31), в 2027 — 2 (1, 2).
+        repo.Items.Add(Leaf(1, 1, LeaveStatus.Approved, LeaveType.Annual, "2026-12-30", "2027-01-02"));
+        Assert.Equal(BalanceService.DefaultAnnualDays - 2, await svc.GetRemainingAnnualDaysAsync(1, 2026));
+        Assert.Equal(BalanceService.DefaultAnnualDays - 2, await svc.GetRemainingAnnualDaysAsync(1, 2027));
+    }
+
+    [Fact]
+    public async Task Leaf_over_new_year_is_not_double_counted()
+    {
+        var (repo, svc) = New();
+        // 25.12.2026–05.01.2027: 7 дней в 2026 + 5 в 2027 = 12 (полный период, без дублей).
+        repo.Items.Add(Leaf(1, 1, LeaveStatus.Approved, LeaveType.Annual, "2026-12-25", "2027-01-05"));
+        Assert.Equal(BalanceService.DefaultAnnualDays - 7, await svc.GetRemainingAnnualDaysAsync(1, 2026));
+        Assert.Equal(BalanceService.DefaultAnnualDays - 5, await svc.GetRemainingAnnualDaysAsync(1, 2027));
     }
 }

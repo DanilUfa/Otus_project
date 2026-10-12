@@ -1,5 +1,6 @@
 using VacationPlanner.Domain;
 using VacationPlanner.Domain.Entities;
+using VacationPlanner.Application;
 
 namespace VacationPlanner.Application.Patterns;
 
@@ -44,9 +45,9 @@ public class LeaveRequestBuilder
     public LeaveRequest Build()
     {
         if (_start == default || _end == default)
-            throw new InvalidOperationException("Даты отпуска не заданы.");
+            throw new DomainValidationException("Даты отпуска не заданы.");
         if (_end.Date < _start.Date)
-            throw new InvalidOperationException("Дата окончания раньше даты начала.");
+            throw new DomainValidationException("Дата окончания раньше даты начала.");
 
         return LeaveRequestFactory.Create(_userId, _type, _start, _end, _reason);
     }

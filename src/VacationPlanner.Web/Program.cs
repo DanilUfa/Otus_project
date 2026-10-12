@@ -133,12 +133,22 @@ app.UseAuthorization();
 app.Use(async (ctx, next) =>
 {
     try { await next(); }
+    catch (DomainValidationException ex) // бизнес-валидация (даты, пересечения)
+    {
+        ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await ctx.Response.WriteAsJsonAsync(new { error = ex.Message });
+    }
+    catch (NotFoundException ex) // сущность не найдена
+    {
+        ctx.Response.StatusCode = StatusCodes.Status404NotFound;
+        await ctx.Response.WriteAsJsonAsync(new { error = ex.Message });
+    }
     catch (UnauthorizedAccessException) // нет прав на действие (не автор/не рук-ль)
     {
         ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
         await ctx.Response.WriteAsJsonAsync(new { error = "Доступ запрещён: недостаточно прав." });
     }
-    catch (InvalidOperationException ex) // нелегальный State-переход / нет заявки
+    catch (InvalidOperationException ex) // нелегальный State-переход
     {
         ctx.Response.StatusCode = StatusCodes.Status409Conflict;
         await ctx.Response.WriteAsJsonAsync(new { error = ex.Message });

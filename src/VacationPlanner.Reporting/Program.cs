@@ -71,7 +71,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/health/live", () => Results.Ok("Healthy"));
-app.MapGet("/health/ready", (ReportingDbContext db) => db.ReadLeaves.Any() ? Results.Ok("Healthy") : Results.StatusCode(503));
+// Readiness = связность с БД (SELECT 1), а не наличие данных:
+// иначе на свежей БД сервис навсегда "не готов" (gateway в compose ждёт service_healthy).
+app.MapGet("/health/ready", async (ReportingDbContext db, CancellationToken ct) =>
+{
+    await db.Database.ExecuteSqlRawAsync("SELECT 1", ct);
+    return Results.Ok("Healthy");
+});
 app.MapGet("/api/info", () => Results.Ok(ServiceInfo()));
 
 // Read-модель (CQRS): календарь отпусков отдела из СВОЕЙ БД.

@@ -72,7 +72,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/health/live", () => Results.Ok("Healthy"));
-app.MapGet("/health/ready", (AuditDbContext db) => db.AuditLogs.Any() ? Results.Ok("Healthy") : Results.StatusCode(503));
+// Readiness = связность с БД, а не наличие данных (иначе свежий деплой "не готов" навсегда).
+app.MapGet("/health/ready", async (AuditDbContext db, CancellationToken ct) =>
+{
+    await db.Database.ExecuteSqlRawAsync("SELECT 1", ct);
+    return Results.Ok("Healthy");
+});
 app.MapGet("/api/info", () => Results.Ok(ServiceInfo()));
 
 // История операций над заявками (bounded-контекст аудита, своя БД).

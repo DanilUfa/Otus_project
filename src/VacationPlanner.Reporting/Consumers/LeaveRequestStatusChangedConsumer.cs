@@ -21,7 +21,15 @@ public class LeaveRequestStatusChangedConsumer(
         var db = scope.ServiceProvider.GetRequiredService<ReportingDbContext>();
 
         var row = await db.ReadLeaves.FirstOrDefaultAsync(r => r.RequestId == e.RequestId, context.CancellationToken);
-        if (row is null) return;
+        if (row is null)
+        {
+            // Out-of-order: status-changed обслуживает консьюмер отдельной очереди и может
+            // прийти раньше, чем submitted создал read-модель. Не глотаем молча — exception
+            // заставляет UseMessageRetry переповторить (короткое окно, в норме хватает);
+            // если и после ретраев строки нет — событие уйдёт в DLQ (_error), а не потеряется.
+            throw new InvalidOperationException(
+                "READMODEL requestId=" + e.RequestId + " — read-модель ещё не создана (либо заявка не существует)");
+        }
 
         if (e.Status == LeaveStatus.Declined || e.Status == LeaveStatus.Cancelled)
         {

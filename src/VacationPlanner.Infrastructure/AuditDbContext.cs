@@ -17,6 +17,7 @@ public class AuditDbContext(DbContextOptions<AuditDbContext> options) : DbContex
         {
             e.ToTable("AuditLogs");
             e.HasIndex(a => a.RequestId);
+            e.HasIndex(a => new { a.RequestId, a.Action, a.Detail }).IsUnique(); // идемпотентность redelivery
             e.HasIndex(a => a.CreatedAt);
             e.Property(a => a.Action).HasMaxLength(32);
             e.Property(a => a.Detail).HasMaxLength(128);

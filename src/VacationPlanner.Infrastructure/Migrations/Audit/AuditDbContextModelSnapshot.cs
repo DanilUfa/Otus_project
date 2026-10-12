@@ -54,6 +54,9 @@ namespace VacationPlanner.Infrastructure.Migrations.Audit
 
                     b.HasIndex("RequestId");
 
+                    b.HasIndex("RequestId", "Action", "Detail")
+                        .IsUnique();
+
                     b.ToTable("AuditLogs", (string)null);
                 });
 #pragma warning restore 612, 618

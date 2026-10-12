@@ -17,6 +17,7 @@ public class ReportingDbContext(DbContextOptions<ReportingDbContext> options) : 
         modelBuilder.Entity<ReadLeave>(e =>
         {
             e.ToTable("ReadLeaves");
+            e.HasIndex(r => r.RequestId).IsUnique(); // идемпотентность redelivery
             e.HasIndex(r => new { r.UserId, r.Status });
             e.HasIndex(r => new { r.StartDate, r.Status });
             e.Property(r => r.UserName).HasMaxLength(120);

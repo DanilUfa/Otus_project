@@ -58,6 +58,9 @@ namespace VacationPlanner.Infrastructure.Migrations.Reporting
 
                     b.HasKey("Id");
 
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
                     b.HasIndex("StartDate", "Status");
 
                     b.HasIndex("UserId", "Status");

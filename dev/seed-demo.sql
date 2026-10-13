@@ -1,4 +1,4 @@
--- Демо-данные: 4 сотрудника (Иван/Менеджер 1, Пётр 2, Мария 3, Алексей 4),
+-- Демо-данные для ретроспективы: 4 сотрудника (Иван/Менеджер 1, Пётр 2, Мария 3, Алексей 4),
 -- 22 заявки: утверждённые/на согласовании/отклонённые/отменённые, пересечение (июнь-2026),
 -- отпуск через границу 2026→2027, заявки 2027. Обходит REST API намеренно (полный год, вызывающий
 -- заполнен вручную). Идемпотентен: перезапуск = те же данные.
@@ -8,7 +8,6 @@ BEGIN;
 DELETE FROM "LeaveRequests";
 DELETE FROM "RefreshTokens";
 DELETE FROM "OutboxMessages";
-SELECT setval(pg_get_serial_sequence('"LeaveRequests"','Id'), 1, false);
 INSERT INTO "LeaveRequests" ("Id","UserId","Type","StartDate","EndDate","Status","Reason","CreatedAt") VALUES
 (1,2,0,TIMESTAMPTZ '2026-01-12T00:00:00Z',TIMESTAMPTZ '2026-01-16T00:00:00Z',2,'Новогодние каникулы',TIMESTAMPTZ '2026-01-01T00:00:00Z'),
 (2,3,0,TIMESTAMPTZ '2026-02-02T00:00:00Z',TIMESTAMPTZ '2026-02-08T00:00:00Z',2,'Лыжный курс',TIMESTAMPTZ '2026-01-01T00:00:00Z'),
@@ -32,12 +31,12 @@ INSERT INTO "LeaveRequests" ("Id","UserId","Type","StartDate","EndDate","Status"
 (20,3,0,TIMESTAMPTZ '2027-09-06T00:00:00Z',TIMESTAMPTZ '2027-09-17T00:00:00Z',2,'Отпуск в сентябре',TIMESTAMPTZ '2026-01-01T00:00:00Z'),
 (21,2,1,TIMESTAMPTZ '2027-10-04T00:00:00Z',TIMESTAMPTZ '2027-10-08T00:00:00Z',2,'Больничный',TIMESTAMPTZ '2026-01-01T00:00:00Z'),
 (22,1,0,TIMESTAMPTZ '2027-12-27T00:00:00Z',TIMESTAMPTZ '2027-12-31T00:00:00Z',2,'Предновогодний',TIMESTAMPTZ '2026-01-01T00:00:00Z');
+SELECT setval(pg_get_serial_sequence('"LeaveRequests"','Id'), (SELECT COALESCE(max("Id"),0)+1 FROM "LeaveRequests"), false);
 COMMIT;
 
 \connect vacation_audit
 BEGIN;
 DELETE FROM "AuditLogs";
-SELECT setval(pg_get_serial_sequence('"AuditLogs"','Id'), 1, false);
 INSERT INTO "AuditLogs" ("Id","RequestId","UserId","Action","Detail","CreatedAt") VALUES
 (1,1,2,'created','Annual',TIMESTAMPTZ '2026-01-01T00:00:00Z'),
 (2,1,2,'status','Approved',TIMESTAMPTZ '2026-01-02T00:00:00Z'),
@@ -83,12 +82,12 @@ INSERT INTO "AuditLogs" ("Id","RequestId","UserId","Action","Detail","CreatedAt"
 (42,21,2,'status','Approved',TIMESTAMPTZ '2026-01-02T00:00:00Z'),
 (43,22,1,'created','Annual',TIMESTAMPTZ '2026-01-01T00:00:00Z'),
 (44,22,1,'status','Approved',TIMESTAMPTZ '2026-01-02T00:00:00Z');
+SELECT setval(pg_get_serial_sequence('"AuditLogs"','Id'), (SELECT COALESCE(max("Id"),0)+1 FROM "AuditLogs"), false);
 COMMIT;
 
 \connect vacation_reporting
 BEGIN;
 DELETE FROM "ReadLeaves";
-SELECT setval(pg_get_serial_sequence('"ReadLeaves"','Id'), 1, false);
 INSERT INTO "ReadLeaves" ("Id","RequestId","UserId","UserName","Type","StartDate","EndDate","Status","UpdatedAt") VALUES
 (1,1,2,'Пётр Сотрудник',0,TIMESTAMPTZ '2026-01-12T00:00:00Z',TIMESTAMPTZ '2026-01-16T00:00:00Z',2,TIMESTAMPTZ '2026-01-02T00:00:00Z'),
 (2,2,3,'Мария Бухгалтер',0,TIMESTAMPTZ '2026-02-02T00:00:00Z',TIMESTAMPTZ '2026-02-08T00:00:00Z',2,TIMESTAMPTZ '2026-01-02T00:00:00Z'),
@@ -110,4 +109,5 @@ INSERT INTO "ReadLeaves" ("Id","RequestId","UserId","UserName","Type","StartDate
 (18,20,3,'Мария Бухгалтер',0,TIMESTAMPTZ '2027-09-06T00:00:00Z',TIMESTAMPTZ '2027-09-17T00:00:00Z',2,TIMESTAMPTZ '2026-01-02T00:00:00Z'),
 (19,21,2,'Пётр Сотрудник',1,TIMESTAMPTZ '2027-10-04T00:00:00Z',TIMESTAMPTZ '2027-10-08T00:00:00Z',2,TIMESTAMPTZ '2026-01-02T00:00:00Z'),
 (20,22,1,'Иван Менеджер',0,TIMESTAMPTZ '2027-12-27T00:00:00Z',TIMESTAMPTZ '2027-12-31T00:00:00Z',2,TIMESTAMPTZ '2026-01-02T00:00:00Z');
+SELECT setval(pg_get_serial_sequence('"ReadLeaves"','Id'), (SELECT COALESCE(max("Id"),0)+1 FROM "ReadLeaves"), false);
 COMMIT;

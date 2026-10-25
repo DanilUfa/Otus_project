@@ -27,12 +27,23 @@ export default function AnnualCalendar() {
   const usersRaw = sessionStorage.getItem('users');
   const [sel, setSel] = useState(null);   // null = все, [] = никого, иначе массив id
   const [withPending, setWithPending] = useState(false);
+  const [holidays, setHolidays] = useState({});   // 'YYYY-MM-DD' -> название
 
-  // Смена года: подтягиваем read-модель этого года (best-effort: кэш остаётся).
+  // Смена года: подтягиваем read-модель этого года (best-effort: кэш остаётся) и праздники.
   useEffect(() => {
     api.reportCalendar(year)
       .then((rep) => { setReport(rep); sessionStorage.setItem('report', JSON.stringify(rep)); })
       .catch(() => setReport(null));
+    api.holidays(year)
+      .then((list) => {
+        const m = {};
+        (list || []).forEach((h) => {
+          const d = pd(h.date);
+          m[d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')] = h.name;
+        });
+        setHolidays(m);
+      })
+      .catch(() => setHolidays({}));
   }, [year]);
 
   if (!raw || !usersRaw) {
@@ -121,6 +132,7 @@ export default function AnnualCalendar() {
         <span className="lg"><span className="sw pend" />На рассмотрении</span>
         <span className="lg"><span className="sw over" />Пересечение (&ge;2)</span>
         <span className="lg"><span className="sw dot" />Точка = день сотрудника</span>
+        <span className="lg"><span className="sw hol" />Праздничный день</span>
         <span className="sp" />
         {years.map((y) => (
           <button key={y} className={'ghost sm' + (y === year ? ' on' : '')} onClick={() => setYear(y)}>{y}</button>
@@ -159,10 +171,13 @@ export default function AnnualCalendar() {
                   const ls = onLeavers(c.i);
                   const over = ls.length > 1;
                   const we = (new Date(year, mo.m, c.d).getDay() + 6) % 7 >= 5;
-                  const cls = (ls.length ? ' has' : '') + (over ? ' over' : '') + (we ? ' we' : '');
+                  const hol = holidays[year + '-' + String(mo.m + 1).padStart(2, '0') + '-' + String(c.d).padStart(2, '0')];
+                  const cls = (ls.length ? ' has' : '') + (over ? ' over' : '') + (we ? ' we' : '') + (hol ? ' hol' : '');
+                  const tip = [dayTip(c.i), hol ? 'Праздник: ' + hol : ''].filter(Boolean).join('\n') || undefined;
                   return (
-                    <div className={'cell' + cls} key={k} title={dayTip(c.i) || undefined}>
+                    <div className={'cell' + cls} key={k} title={tip}>
                       <span className="n">{c.d}</span>
+                      {hol && <span className="hol-flag">✦</span>}
                       {ls.length > 0 && (
                         <span className="marks">
                           {ls.slice(0, 3).map((u) => <i key={u} className="mdot" style={{ background: ultOf(u) }} />)}

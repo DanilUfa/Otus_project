@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<LeaveAttachment> LeaveAttachments => Set<LeaveAttachment>();
+    public DbSet<Holiday> Holidays => Set<Holiday>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -65,6 +66,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(a => a.FileName).HasMaxLength(255);
             e.Property(a => a.ContentType).HasMaxLength(100);
             e.HasIndex(a => a.LeaveRequestId);
+        });
+
+        modelBuilder.Entity<Holiday>(e =>
+        {
+            e.HasIndex(h => h.Date);
+            e.Property(h => h.Name).HasMaxLength(100);
         });
     }
 }

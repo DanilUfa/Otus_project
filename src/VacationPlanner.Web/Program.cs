@@ -315,6 +315,17 @@ api.MapDelete("/leave/attachments/{attachmentId:int}", async (int attachmentId, 
    .WithName("DeleteLeaveAttachment")
    ;
 
+// ---------- Праздничные дни (справочник для календаря) ----------
+api.MapGet("/holidays", async (int? year, AppDbContext db, CancellationToken ct)
+        => Results.Ok(await db.Holidays
+            .Where(h => h.Date.Year == (year ?? DateTime.UtcNow.Year))
+            .OrderBy(h => h.Date)
+            .Select(h => new { date = h.Date, name = h.Name })
+            .ToListAsync(ct)))
+   .RequireAuthorization("AuthenticatedOnly")
+   .WithName("GetHolidays")
+   ;
+
 // ---------- Balance ----------
 api.MapGet("/balance/{userId:int}", async (
         int userId, [FromQuery] int? year, BalanceService balance, IDistributedCache cache,
@@ -365,5 +376,28 @@ static void Seed(AppDbContext db, IPasswordHasher hasher)
     Ensure("petr@vac.local", "User123!", "Пётр Сотрудник", UserRole.Employee, manager);
     Ensure("maria@vac.local", "User123!", "Мария Бухгалтер", UserRole.Employee, manager);
     Ensure("alex@vac.local", "User123!", "Алексей Инженер", UserRole.Employee, manager);
-    db.SaveChanges();
+
+    // Нерабочие праздничные дни (фиксированные даты РФ) — для отображения в календаре.
+    // Расчёт отпусков их не исключает: дни считаются по выбранному периоду.
+    if (!db.Holidays.Any())
+    {
+        var holidayDefs = new (string Md, string Name)[]
+        {
+            ("01-01", "Новогодние каникулы"), ("01-02", "Новогодние каникулы"),
+            ("01-03", "Новогодние каникулы"), ("01-04", "Новогодние каникулы"),
+            ("01-05", "Новогодние каникулы"), ("01-06", "Новогодние каникулы"),
+            ("01-07", "Рождество Христово"),   ("01-08", "Новогодние каникулы"),
+            ("02-23", "День защитника Отечества"), ("03-08", "Международный женский день"),
+            ("05-01", "Праздник Весны и Труда"),   ("05-09", "День Победы"),
+            ("06-12", "День России"),              ("11-04", "День народного единства"),
+        };
+        for (var y = 2025; y <= 2028; y++)
+            foreach (var (md, name) in holidayDefs)
+                db.Holidays.Add(new Holiday
+                {
+                    Date = new DateTime(y, int.Parse(md[..2]), int.Parse(md[3..]), 0, 0, 0, DateTimeKind.Utc),
+                    Name = name,
+                });
+        db.SaveChanges();
+    }
 }

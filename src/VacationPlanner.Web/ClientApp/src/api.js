@@ -120,6 +120,7 @@ export const api = {
   balance: (userId, year) => request(`/api/balance/${userId}?year=${year}`),
   // Read-модель (CQRS): календарь отдела из микросервиса reporting
   reportCalendar: (year) => request(`/api/reports/calendar?year=${year}`),
+  holidays: (year) => request(`/api/holidays?year=${year}`),
   // История операций из микросервиса audit
   audit: (requestId) => request(`/api/audit${requestId ? `?requestId=${requestId}` : ''}`),
 

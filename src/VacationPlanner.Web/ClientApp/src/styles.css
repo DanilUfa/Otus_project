@@ -164,3 +164,13 @@ button.sm { padding: 4px 10px; font-size: 12px; }
 .acc em { font-style: normal; color: #2563eb; font-size: 12px; }
 .acc.role-mgr { border-left: 4px solid #2563eb; }
 .acc.role-emp { border-left: 4px solid #0d9488; }
+
+/* Документы к заявке (приложения) */
+.att { position: relative; }
+.att-list { position: absolute; right: 0; top: 28px; z-index: 20; min-width: 280px; padding: 10px; background: var(--panel); box-shadow: 0 8px 24px rgba(16,24,40,.16); }
+.att-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.att-item:last-child { border-bottom: none; }
+.att-name { font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-name small { color: var(--muted); }
+.att-actions { display: flex; gap: 4px; flex-shrink: 0; }
+

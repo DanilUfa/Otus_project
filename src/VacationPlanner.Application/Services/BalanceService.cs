@@ -22,7 +22,7 @@ public class BalanceService(ILeaveRepository leaveRepository, BalanceGate gate)
         var to = new DateTime(year, 12, 31, 0, 0, 0, DateTimeKind.Utc);
         var requests = await leaveRepository.GetByUserInRangeAsync(userId, from, to, ct);
 
-        // Дни учитываются ТОЛЬКО в пределах запрашиваемого года: отпуск через границу
+        // Дни учитываются только в пределах запрашиваемого года: отпуск через границу
         // (25.12–05.01) не задваивается — в каждый год попадает своя часть периода.
         // «На рассмотрении» тоже резервирует дни: нельзя набрать заявок больше лимита
         // и «для себя» пересечься с сотрудником, чей отпуск ещё согласовывается.

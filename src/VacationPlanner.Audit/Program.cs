@@ -47,6 +47,7 @@ builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<LeaveSubmittedAuditConsumer>();
     x.AddConsumer<LeaveStatusAuditConsumer>();
+    x.AddConsumer<LeaveAttachmentAuditConsumer>();
     x.UsingRabbitMq((ctx, cfg) =>
     {
         cfg.Host(rabbit["Host"] ?? "localhost", "/", h =>
@@ -56,6 +57,7 @@ builder.Services.AddMassTransit(x =>
         });
         cfg.ReceiveEndpoint("audit-leave-submitted", e => e.ConfigureConsumer<LeaveSubmittedAuditConsumer>(ctx));
         cfg.ReceiveEndpoint("audit-leave-status-changed", e => e.ConfigureConsumer<LeaveStatusAuditConsumer>(ctx));
+        cfg.ReceiveEndpoint("audit-leave-attachment-added", e => e.ConfigureConsumer<LeaveAttachmentAuditConsumer>(ctx));
     });
 });
 

@@ -110,7 +110,7 @@ function Data({ getter, k, render }) {
 }
 
 /* ----------  Вход ---------- */
-// Демо-аккаунты для быстрого входа одним кликом (демо-пароли).
+// Демо-аккаунты для быстрого входа одним кликом (только для показа/ретро — пароли демо-сида).
 const DEMO_ACCOUNTS = [
   { name: 'Иван Менеджер', role: 'Manager',   email: 'manager@vac.local', password: 'Manager123!' },
   { name: 'Пётр Сотрудник', role: 'Employee',  email: 'petr@vac.local', password: 'User123!' },
@@ -186,16 +186,30 @@ function SubmitForm({ userId, onDone }) {
   const [start, setStart] = useState(`${YEAR}-07-01`);
   const [end, setEnd] = useState(`${YEAR}-07-14`);
   const [reason, setReason] = useState('');
+  const [file, setFile] = useState(null);
   const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
 
   async function submit(e) {
     e.preventDefault();
     setMsg('');
+    setBusy(true);
     try {
-      await api.createLeave(userId, Number(type), start, end, reason);
-      setMsg('Заявка отправлена на согласование.');
+      const created = await api.createLeave(userId, Number(type), start, end, reason);
+      if (file) {
+        try {
+          await api.uploadAttachment(created.id, file);
+          setMsg('Заявка и документ отправлены на согласование.');
+        } catch (e2) {
+          setMsg('Заявка отправлена, но документ не прикрепился: ' + e2.message);
+        }
+        setFile(null);
+      } else {
+        setMsg('Заявка отправлена на согласование.');
+      }
       onDone();
     } catch (e) { setMsg('Ошибка: ' + e.message); }
+    setBusy(false);
   }
 
   async function saveDraft(e) {
@@ -218,8 +232,11 @@ function SubmitForm({ userId, onDone }) {
       <label>Начало <input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></label>
       <label>Конец <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></label>
       <label>Причина <input value={reason} onChange={(e) => setReason(e.target.value)} /></label>
+      <label>Документ (больничный/справка, до 10 МБ)
+        <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => setFile(e.target.files[0] || null)} />
+      </label>
       <div className="row">
-        <button>Подать</button>
+        <button disabled={busy}>Подать</button>
         <button className="ghost" type="button" onClick={saveDraft}>Сохранить черновик</button>
         {msg && <span className="ok">{msg}</span>}
       </div>
@@ -236,7 +253,7 @@ function LeaveTable({ leaves, myUserId, isManager, onAction }) {
 
   return (
     <table>
-      <thead><tr><th>#</th><th>Сотрудник</th><th>Тип</th><th>Период</th><th>Дней</th><th>Статус</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>Сотрудник</th><th>Тип</th><th>Период</th><th>Дней</th><th>Статус</th><th>Документы</th><th></th></tr></thead>
       <tbody>
         {shown.map((l) => (
           <tr key={l.id}>
@@ -246,6 +263,7 @@ function LeaveTable({ leaves, myUserId, isManager, onAction }) {
             <td>{l.startDate.slice(0, 10)} … {l.endDate.slice(0, 10)}</td>
             <td>{l.days}</td>
             <td><span className={'st st-' + l.status}>{STATUS_LABELS[l.status]}</span></td>
+            <td><AttachCell leaveId={l.id} canModify={isManager || myUserId === l.userId} /></td>
             {isManager && l.status === 1 && (
               <td className="actions">
                 <button onClick={() => api.approve(l.id).then(onAction)}>Утвердить</button>
@@ -262,6 +280,49 @@ function LeaveTable({ leaves, myUserId, isManager, onAction }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+/* ----------  Документы заявки (приложения) ---------- */
+function AttachCell({ leaveId, canModify }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState(null);
+  const [err, setErr] = useState('');
+
+  async function toggle() {
+    if (open) { setOpen(false); return; }
+    setErr('');
+    setItems(null);
+    setOpen(true);
+    try { setItems(await api.attachments(leaveId)); }
+    catch (e) { setErr(String(e.message)); }
+  }
+
+  return (
+    <span className="att">
+      <button className="ghost sm" type="button" onClick={toggle}>📎{items ? items.length : ''}</button>
+      {open && (
+        <div className="att-list card">
+          {err && <div className="error">{err}</div>}
+          {items === null ? <span className="dim">Загрузка…</span> :
+            items.length === 0 ? <span className="dim">Нет документов</span> :
+            items.map((a) => (
+              <div key={a.id} className="att-item">
+                <span className="att-name" title={a.contentType}>📄 {a.fileName} <small>{(a.length / 1024).toFixed(1)} КБ</small></span>
+                <span className="att-actions">
+                  <button className="ghost sm" onClick={() => api.downloadAttachment(a.id, a.fileName)}>Скачать</button>
+                  {canModify && (
+                    <button className="ghost sm warn" title="Удалить документ"
+                      onClick={async () => { try { await api.deleteAttachment(a.id); toggle(); } catch (e) { setErr(String(e.message)); } }}>
+                      ✕
+                    </button>
+                  )}
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
+    </span>
   );
 }
 

@@ -22,3 +22,16 @@ public record LeaveRequestDto(
     string Reason,
     int Days,
     int? ManagerId = null);
+
+/// <summary>Документ, прикреплённый к заявке (метаданные, без содержимого).</summary>
+public record LeaveAttachmentDto(
+    int Id,
+    int LeaveRequestId,
+    string FileName,
+    string ContentType,
+    long Length,
+    int UploadedByUserId,
+    DateTime UploadedAt);
+
+/// <summary>Готовый файл для скачивания.</summary>
+public record LeaveAttachmentDownload(string FileName, string ContentType, byte[] Content);

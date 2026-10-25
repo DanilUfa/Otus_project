@@ -283,6 +283,38 @@ api.MapPost("/leave/{id:int}/decline", async (int id, LeaveService service, Clai
    .WithName("DeclineLeaveRequest")
    ;
 
+// ---------- Attachments (документы к заявке: больничный лист, справка) ----------
+api.MapPost("/leave/{id:int}/attachments", async (int id, IFormFile file, AttachmentService service, ClaimsPrincipal user, CancellationToken ct)
+        => {
+            var dto = await service.AddAsync(id, GetUserId(user), file.FileName, file.ContentType, file.Length, file.OpenReadStream(), ct);
+            return Results.Created($"/api/leave/attachments/{dto.Id}", dto);
+        })
+   .RequireAuthorization("AuthenticatedOnly")
+   .DisableAntiforgery()
+   .WithName("UploadLeaveAttachment")
+   ;
+
+api.MapGet("/leave/{id:int}/attachments", async (int id, AttachmentService service, ClaimsPrincipal user, CancellationToken ct)
+        => Results.Ok(await service.GetAttachmentsAsync(id, GetUserId(user), IsManagerOrAdmin(user), ct)))
+   .RequireAuthorization("AuthenticatedOnly")
+   .WithName("GetLeaveAttachments")
+   ;
+
+api.MapGet("/leave/attachments/{attachmentId:int}/download", async (int attachmentId, AttachmentService service, ClaimsPrincipal user, CancellationToken ct)
+        => {
+            var dl = await service.DownloadAsync(attachmentId, GetUserId(user), IsManagerOrAdmin(user), ct);
+            return Results.File(dl.Content, dl.ContentType, dl.FileName);
+        })
+   .RequireAuthorization("AuthenticatedOnly")
+   .WithName("DownloadLeaveAttachment")
+   ;
+
+api.MapDelete("/leave/attachments/{attachmentId:int}", async (int attachmentId, AttachmentService service, ClaimsPrincipal user, CancellationToken ct)
+        => { await service.DeleteAsync(attachmentId, GetUserId(user), IsManagerOrAdmin(user), ct); return Results.NoContent(); })
+   .RequireAuthorization("AuthenticatedOnly")
+   .WithName("DeleteLeaveAttachment")
+   ;
+
 // ---------- Balance ----------
 api.MapGet("/balance/{userId:int}", async (
         int userId, [FromQuery] int? year, BalanceService balance, IDistributedCache cache,
@@ -311,6 +343,9 @@ app.Run();
 
 static int GetUserId(ClaimsPrincipal user)
     => int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException());
+
+static bool IsManagerOrAdmin(ClaimsPrincipal user)
+    => user.IsInRole(UserRole.Manager.ToString()) || user.IsInRole(UserRole.Admin.ToString());
 
 // Тестовые данные для черновика. Идиопотентно: пользователи добавляются, если отсутствуют.
 static void Seed(AppDbContext db, IPasswordHasher hasher)

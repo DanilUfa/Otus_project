@@ -22,6 +22,49 @@ namespace VacationPlanner.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("VacationPlanner.Domain.Entities.LeaveAttachment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int>("LeaveRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Length")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UploadedByUserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeaveRequestId");
+
+                    b.HasIndex("UploadedByUserId");
+
+                    b.ToTable("LeaveAttachments");
+                });
+
             modelBuilder.Entity("VacationPlanner.Domain.Entities.LeaveRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -165,6 +208,25 @@ namespace VacationPlanner.Infrastructure.Migrations
                     b.HasIndex("ManagerId");
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("VacationPlanner.Domain.Entities.LeaveAttachment", b =>
+                {
+                    b.HasOne("VacationPlanner.Domain.Entities.LeaveRequest", "LeaveRequest")
+                        .WithMany()
+                        .HasForeignKey("LeaveRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("VacationPlanner.Domain.Entities.User", "UploadedBy")
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("LeaveRequest");
+
+                    b.Navigation("UploadedBy");
                 });
 
             modelBuilder.Entity("VacationPlanner.Domain.Entities.LeaveRequest", b =>

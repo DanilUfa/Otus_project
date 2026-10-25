@@ -30,6 +30,27 @@ public class LeaveRepository(AppDbContext db) : ILeaveRepository
             .Where(r => r.Status == LeaveStatus.Draft && r.CreatedAt < olderThan)
             .ToListAsync(ct);
 
+    public Task<List<LeaveAttachment>> GetAttachmentsAsync(int leaveId, CancellationToken ct = default)
+        => db.LeaveAttachments.AsNoTracking()
+            .Where(a => a.LeaveRequestId == leaveId)
+            .OrderByDescending(a => a.UploadedAt)
+            .ToListAsync(ct);
+
+    public Task<LeaveAttachment?> GetAttachmentByIdAsync(int attachmentId, CancellationToken ct = default)
+        => db.LeaveAttachments.FirstOrDefaultAsync(a => a.Id == attachmentId, ct);
+
+    public Task AddAttachmentAsync(LeaveAttachment attachment, CancellationToken ct = default)
+    {
+        db.LeaveAttachments.Add(attachment);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAttachmentAsync(LeaveAttachment attachment, CancellationToken ct = default)
+    {
+        db.LeaveAttachments.Remove(attachment);
+        return Task.CompletedTask;
+    }
+
     public Task SaveAsync(CancellationToken ct = default)
         => db.SaveChangesAsync(ct);
 }

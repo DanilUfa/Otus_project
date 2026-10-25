@@ -12,6 +12,8 @@ namespace VacationPlanner.UnitTests.Fakes;
 public sealed class FakeLeaveRepository : ILeaveRepository
 {
     public List<LeaveRequest> Items { get; } = new();
+    public List<LeaveAttachment> AttachmentItems { get; } = new();
+    private int _nextAttachmentId = 1;
     public int InRangeCalls { get; private set; }
     public (int UserId, DateTime From, DateTime To)? LastRange { get; private set; }
 
@@ -41,6 +43,25 @@ public sealed class FakeLeaveRepository : ILeaveRepository
         => Task.FromResult(Items
             .Where(r => r.Status == LeaveStatus.Draft && r.CreatedAt < olderThan)
             .ToList());
+
+    public Task<List<LeaveAttachment>> GetAttachmentsAsync(int leaveId, CancellationToken ct = default)
+        => Task.FromResult(AttachmentItems.Where(a => a.LeaveRequestId == leaveId).ToList());
+
+    public Task<LeaveAttachment?> GetAttachmentByIdAsync(int attachmentId, CancellationToken ct = default)
+        => Task.FromResult(AttachmentItems.FirstOrDefault(a => a.Id == attachmentId));
+
+    public Task AddAttachmentAsync(LeaveAttachment attachment, CancellationToken ct = default)
+    {
+        if (attachment.Id == 0) attachment.Id = _nextAttachmentId++;
+        AttachmentItems.Add(attachment);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAttachmentAsync(LeaveAttachment attachment, CancellationToken ct = default)
+    {
+        AttachmentItems.Remove(attachment);
+        return Task.CompletedTask;
+    }
 
     public Task SaveAsync(CancellationToken ct = default) => Task.CompletedTask;
 }

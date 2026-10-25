@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<LeaveAttachment> LeaveAttachments => Set<LeaveAttachment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -49,6 +50,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             e.HasIndex(lr => new { lr.UserId, lr.StartDate });
             e.Property(lr => lr.Reason).HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<LeaveAttachment>(e =>
+        {
+            e.HasOne(a => a.LeaveRequest)
+                .WithMany()
+                .HasForeignKey(a => a.LeaveRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(a => a.UploadedBy)
+                .WithMany()
+                .HasForeignKey(a => a.UploadedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            e.Property(a => a.FileName).HasMaxLength(255);
+            e.Property(a => a.ContentType).HasMaxLength(100);
+            e.HasIndex(a => a.LeaveRequestId);
         });
     }
 }

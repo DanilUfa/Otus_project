@@ -59,6 +59,7 @@ public class OutboxPublisherHostedService(
                 {
                     nameof(LeaveRequestSubmitted) => JsonSerializer.Deserialize<LeaveRequestSubmitted>(m.Payload)!,
                     nameof(LeaveRequestStatusChanged) => JsonSerializer.Deserialize<LeaveRequestStatusChanged>(m.Payload)!,
+                    nameof(LeaveAttachmentAdded) => JsonSerializer.Deserialize<LeaveAttachmentAdded>(m.Payload)!,
                     _ => throw new InvalidOperationException($"Неизвестный тип outbox: {m.Type}")
                 };
                 await publishEndpoint.Publish(evt, ct);
@@ -74,7 +75,7 @@ public class OutboxPublisherHostedService(
                 }
                 else
                 {
-                    log.LogWarning(ex, "OUTBOX {Id} {Type}: публикация не удалась (попытка {N}/{5})", m.Id, m.Type, m.FailedCount);
+                    log.LogWarning(ex, "OUTBOX {Id} {Type}: публикация не удалась (попытка {N} из 5)", m.Id, m.Type, m.FailedCount);
                 }
             }
         }

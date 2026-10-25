@@ -67,14 +67,14 @@ async function rotateRefresh() {
   return true;
 }
 
-async function request(path, { method = 'GET', body } = {}) {
+async function request(path, { method = 'GET', body, formData } = {}) {
+  // formData: multipart (загрузка файлов) — браузер сам ставит Content-Type с boundary.
+  const headers = token() ? { Authorization: `Bearer ${token()}` } : {};
+  if (!formData) headers['Content-Type'] = 'application/json';
   const attempt = () => fetch(path, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token() ? { Authorization: `Bearer ${token()}` } : {})
-    },
-    body: body ? JSON.stringify(body) : undefined
+    headers,
+    body: formData || (body ? JSON.stringify(body) : undefined)
   });
 
   let res = await attempt();
@@ -121,5 +121,25 @@ export const api = {
   // Read-модель (CQRS): календарь отдела из микросервиса reporting
   reportCalendar: (year) => request(`/api/reports/calendar?year=${year}`),
   // История операций из микросервиса audit
-  audit: (requestId) => request(`/api/audit${requestId ? `?requestId=${requestId}` : ''}`)
+  audit: (requestId) => request(`/api/audit${requestId ? `?requestId=${requestId}` : ''}`),
+
+  // Документы к заявке (приложения: больничный лист, справка)
+  attachments: (leaveId) => request(`/api/leave/${leaveId}/attachments`),
+  uploadAttachment: (leaveId, file) => {
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    return request(`/api/leave/${leaveId}/attachments`, { method: 'POST', formData: fd });
+  },
+  deleteAttachment: (id) => request(`/api/leave/attachments/${id}`, { method: 'DELETE' }),
+  downloadAttachment: async (id, fileName) => {
+    const headers = token() ? { Authorization: `Bearer ${token()}` } : {};
+    const res = await fetch(`/api/leave/attachments/${id}/download`, { headers });
+    if (!res.ok) throw new Error('Не удалось скачать документ (' + res.status + ')');
+    const blob = await res.blob();
+    const aEl = document.createElement('a');
+    aEl.href = URL.createObjectURL(blob);
+    aEl.download = fileName || 'document';
+    document.body.appendChild(aEl); aEl.click(); aEl.remove();
+    URL.revokeObjectURL(aEl.href);
+  }
 };

@@ -121,6 +121,8 @@ td.y-on:hover { filter: brightness(1.06); }
 .sw.over { background: #fb7185; border-radius: 3px; }
 .sw.dot { background: #2563eb; border-radius: 50%; }
 .sw.hol { background: #fecaca; border: 1px solid #b91c1c; }
+.sw.shift { background: #e9d5ff; border: 1px solid #7c3aed; }
+.sw.short { background: #fde68a; border: 1px solid #b45309; }
 .sp { flex: 1; }
 button.sm { padding: 4px 10px; font-size: 12px; }
 .y-legend .tog { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); cursor: pointer; }
@@ -143,7 +145,12 @@ button.sm { padding: 4px 10px; font-size: 12px; }
 .days .cell.we { background: #f6f8fb; }
 .days .cell.hol { background: #fef2f2; border-color: #fecaca; }
 .days .cell.hol .n { color: #b91c1c; font-weight: 700; }
+.days .cell.hol-shift { background: #faf5ff; border-color: #e9d5ff; }
+.days .cell.hol-shift .n { color: #7c3aed; font-weight: 700; }
+.days .cell.hol-short { background: #fffbeb; border-color: #fde68a; }
+.days .cell.hol-short .n { color: #b45309; font-weight: 700; }
 .days .cell .hol-flag { position: absolute; top: 1px; right: 3px; font-size: 9px; line-height: 1; color: #b91c1c; pointer-events: none; }
+.days .cell .hol-flag.short { color: #b45309; font-size: 8px; background: #fde68a; border-radius: 3px; padding: 1px 2px; }
 .days .cell:hover { border-color: #bcd0f0; box-shadow: 0 1px 3px rgba(16,24,40,.12); }
 .days .cell .n { font-size: 11px; color: var(--muted); font-weight: 500; }
 .days .cell.has::after { content:''; position:absolute; left:0; right:0; bottom:0; height:3px; background: #5ea1f0; border-radius: 0 0 7px 7px; }

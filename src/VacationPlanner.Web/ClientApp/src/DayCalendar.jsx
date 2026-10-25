@@ -39,7 +39,7 @@ export default function AnnualCalendar() {
         const m = {};
         (list || []).forEach((h) => {
           const d = pd(h.date);
-          m[d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')] = h.name;
+          m[d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')] = { n: h.name, k: h.kind || 0 };
         });
         setHolidays(m);
       })
@@ -132,7 +132,9 @@ export default function AnnualCalendar() {
         <span className="lg"><span className="sw pend" />На рассмотрении</span>
         <span className="lg"><span className="sw over" />Пересечение (&ge;2)</span>
         <span className="lg"><span className="sw dot" />Точка = день сотрудника</span>
-        <span className="lg"><span className="sw hol" />Праздничный день</span>
+        <span className="lg"><span className="sw hol" />Праздник</span>
+        <span className="lg"><span className="sw shift" />Перенос выходного</span>
+        <span className="lg"><span className="sw short" />Сокращённый день</span>
         <span className="sp" />
         {years.map((y) => (
           <button key={y} className={'ghost sm' + (y === year ? ' on' : '')} onClick={() => setYear(y)}>{y}</button>
@@ -171,13 +173,16 @@ export default function AnnualCalendar() {
                   const ls = onLeavers(c.i);
                   const over = ls.length > 1;
                   const we = (new Date(year, mo.m, c.d).getDay() + 6) % 7 >= 5;
-                  const hol = holidays[year + '-' + String(mo.m + 1).padStart(2, '0') + '-' + String(c.d).padStart(2, '0')];
-                  const cls = (ls.length ? ' has' : '') + (over ? ' over' : '') + (we ? ' we' : '') + (hol ? ' hol' : '');
-                  const tip = [dayTip(c.i), hol ? 'Праздник: ' + hol : ''].filter(Boolean).join('\n') || undefined;
+                  const hd = holidays[year + '-' + String(mo.m + 1).padStart(2, '0') + '-' + String(c.d).padStart(2, '0')];
+                  const holCls = hd ? (hd.k === 1 ? ' hol-shift' : hd.k === 2 ? ' hol-short' : ' hol') : '';
+                  const cls = (ls.length ? ' has' : '') + (over ? ' over' : '') + (we ? ' we' : '') + holCls;
+                  const holLabel = hd ? (hd.k === 1 ? 'Перенос выходного' : hd.k === 2 ? 'Сокращённый день' : 'Праздник') + ': ' + hd.n : '';
+                  const tip = [dayTip(c.i), holLabel].filter(Boolean).join('\n') || undefined;
+                  const holFlag = hd ? (hd.k === 1 ? '↩' : hd.k === 2 ? '−1ч' : '✦') : '';
                   return (
                     <div className={'cell' + cls} key={k} title={tip}>
                       <span className="n">{c.d}</span>
-                      {hol && <span className="hol-flag">✦</span>}
+                      {hd && <span className={'hol-flag' + (hd.k === 2 ? ' short' : '')}>{holFlag}</span>}
                       {ls.length > 0 && (
                         <span className="marks">
                           {ls.slice(0, 3).map((u) => <i key={u} className="mdot" style={{ background: ultOf(u) }} />)}

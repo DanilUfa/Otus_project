@@ -308,7 +308,7 @@ function AttachCell({ leaveId, canModify }) {
             items.length === 0 ? <span className="dim">Нет документов</span> :
             items.map((a) => (
               <div key={a.id} className="att-item">
-                <span className="att-name" title={a.contentType}>📄 {a.fileName} <small>{(a.length / 1024).toFixed(1)} КБ</small></span>
+                <span className="att-name" title={a.contentType}>📄 {a.fileName} <small>{a.length < 1024 ? a.length + ' Б' : (a.length / 1024).toFixed(1) + ' КБ'}</small></span>
                 <span className="att-actions">
                   <button className="ghost sm" onClick={() => api.downloadAttachment(a.id, a.fileName)}>Скачать</button>
                   {canModify && (

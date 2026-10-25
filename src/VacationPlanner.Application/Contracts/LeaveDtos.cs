@@ -21,7 +21,8 @@ public record LeaveRequestDto(
     LeaveStatus Status,
     string Reason,
     int Days,
-    int? ManagerId = null);
+    int? ManagerId = null,
+    int AttachmentCount = 0);
 
 /// <summary>Документ, прикреплённый к заявке (метаданные, без содержимого).</summary>
 public record LeaveAttachmentDto(

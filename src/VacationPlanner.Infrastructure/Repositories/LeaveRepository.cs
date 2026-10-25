@@ -53,4 +53,15 @@ public class LeaveRepository(AppDbContext db) : ILeaveRepository
 
     public Task SaveAsync(CancellationToken ct = default)
         => db.SaveChangesAsync(ct);
+
+    public async Task<Dictionary<int, int>> GetAttachmentCountsAsync(IEnumerable<int> leaveIds, CancellationToken ct = default)
+    {
+        var ids = leaveIds.ToList();
+        if (ids.Count == 0) return new Dictionary<int, int>();
+        return await db.LeaveAttachments
+            .Where(a => ids.Contains(a.LeaveRequestId))
+            .GroupBy(a => a.LeaveRequestId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+    }
 }

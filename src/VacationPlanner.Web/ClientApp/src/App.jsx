@@ -263,7 +263,7 @@ function LeaveTable({ leaves, myUserId, isManager, onAction }) {
             <td>{l.startDate.slice(0, 10)} … {l.endDate.slice(0, 10)}</td>
             <td>{l.days}</td>
             <td><span className={'st st-' + l.status}>{STATUS_LABELS[l.status]}</span></td>
-            <td><AttachCell leaveId={l.id} canModify={isManager || myUserId === l.userId} /></td>
+            <td><AttachCell leaveId={l.id} canModify={isManager || myUserId === l.userId} count={l.attachmentCount || 0} /></td>
             {isManager && l.status === 1 && (
               <td className="actions">
                 <button onClick={() => api.approve(l.id).then(onAction)}>Утвердить</button>
@@ -284,10 +284,12 @@ function LeaveTable({ leaves, myUserId, isManager, onAction }) {
 }
 
 /* ----------  Документы заявки (приложения) ---------- */
-function AttachCell({ leaveId, canModify }) {
+function AttachCell({ leaveId, canModify, count }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(null);
   const [err, setErr] = useState('');
+
+  if (!count) return <span className="dim">—</span>;
 
   async function toggle() {
     if (open) { setOpen(false); return; }
@@ -298,9 +300,11 @@ function AttachCell({ leaveId, canModify }) {
     catch (e) { setErr(String(e.message)); }
   }
 
+  const shown = items !== null ? items.length : count;
+
   return (
     <span className="att">
-      <button className="ghost sm att-btn" type="button" onClick={toggle}>📎{items && items.length > 0 && <span className="att-count">{items.length}</span>}</button>
+      <button className="ghost sm att-btn" type="button" onClick={toggle}>📎{shown > 0 && <span className="att-count">{shown}</span>}</button>
       {open && (
         <div className="att-list card">
           {err && <div className="error">{err}</div>}

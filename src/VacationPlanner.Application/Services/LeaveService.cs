@@ -180,7 +180,8 @@ public class LeaveService(
         var names = users.ToDictionary(u => u.Id, u => u.Name);
 
         var requests = await leaveRepository.GetAllAsync(ct);
-        return requests.Select(r => ToDto(r, names.GetValueOrDefault(r.UserId) ?? $"User {r.UserId}")).ToList();
+        var counts = await leaveRepository.GetAttachmentCountsAsync(requests.Select(r => r.Id), ct);
+        return requests.Select(r => ToDto(r, names.GetValueOrDefault(r.UserId) ?? $"User {r.UserId}", null, counts)).ToList();
     }
 
     /// <summary>Только заявки указанного пользователя (для сотрудника: видит свои).</summary>
@@ -190,9 +191,10 @@ public class LeaveService(
         var names = users.ToDictionary(u => u.Id, u => u.Name);
 
         var requests = await leaveRepository.GetAllAsync(ct);
+        var counts = await leaveRepository.GetAttachmentCountsAsync(requests.Where(r => r.UserId == userId).Select(r => r.Id), ct);
         return requests
             .Where(r => r.UserId == userId)
-            .Select(r => ToDto(r, names.GetValueOrDefault(r.UserId) ?? $"User {r.UserId}"))
+            .Select(r => ToDto(r, names.GetValueOrDefault(r.UserId) ?? $"User {r.UserId}", null, counts))
             .ToList();
     }
 
@@ -241,7 +243,8 @@ public class LeaveService(
         Payload = JsonSerializer.Serialize(evt),
     };
 
-    private static LeaveRequestDto ToDto(LeaveRequest r, string userName, int? managerId = null) => new(
+    private static LeaveRequestDto ToDto(LeaveRequest r, string userName, int? managerId = null,
+        Dictionary<int, int>? counts = null) => new(
         r.Id,
         r.UserId,
         userName,
@@ -251,5 +254,6 @@ public class LeaveService(
         r.Status,
         r.Reason,
         r.Days,
-        managerId);
+        managerId,
+        counts?.GetValueOrDefault(r.Id) ?? 0);
 }

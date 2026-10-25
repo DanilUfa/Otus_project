@@ -14,6 +14,7 @@ public interface ILeaveRepository
     Task<LeaveAttachment?> GetAttachmentByIdAsync(int attachmentId, CancellationToken ct = default);
     Task AddAttachmentAsync(LeaveAttachment attachment, CancellationToken ct = default);
     Task DeleteAttachmentAsync(LeaveAttachment attachment, CancellationToken ct = default);
+    Task<Dictionary<int, int>> GetAttachmentCountsAsync(IEnumerable<int> leaveIds, CancellationToken ct = default);
 
     Task SaveAsync(CancellationToken ct = default);
 }

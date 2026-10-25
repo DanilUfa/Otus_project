@@ -12,6 +12,7 @@ public static class DependencyInjection
         services.AddScoped<AttachmentService>();
         services.AddScoped<BalanceService>();
         services.AddScoped<AuthService>();
+        services.AddScoped<RegistrationService>();
         services.AddScoped<RefreshTokenCleanupService>();
         services.AddScoped<StaleDraftService>();
         services.AddSingleton<BalanceGate>();

@@ -18,6 +18,12 @@ public class UserRepository(AppDbContext db) : IUserRepository
     public Task<List<User>> GetAllAsync(CancellationToken ct = default)
         => db.Users.AsNoTracking().OrderBy(u => u.Name).ToListAsync(ct);
 
+    public Task AddAsync(User user, CancellationToken ct = default)
+    {
+        db.Users.Add(user);
+        return Task.CompletedTask;
+    }
+
     public Task SaveAsync(CancellationToken ct = default)
         => db.SaveChangesAsync(ct);
 }

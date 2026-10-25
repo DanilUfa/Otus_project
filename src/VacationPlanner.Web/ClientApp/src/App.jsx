@@ -119,19 +119,31 @@ const DEMO_ACCOUNTS = [
 ];
 
 function Login({ onLogin }) {
+  const [mode, setMode] = useState('login');   // login | register | verify
   const [email, setEmail] = useState('petr@vac.local');
   const [password, setPassword] = useState('User123!');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState('');
+  // Регистрация
+  const [rName, setRName] = useState('');
+  const [rEmail, setREmail] = useState('');
+  const [rPass, setRPass] = useState('');
+  const [rPass2, setRPass2] = useState('');
+  const [vCode, setVCode] = useState('');
+  const [info, setInfo] = useState('');
+
+  async function setSession(acc) {
+    localStorage.setItem('token', acc.token);
+    localStorage.setItem('refreshToken', acc.refreshToken);
+    localStorage.setItem('user', JSON.stringify(acc));
+    onLogin(acc);
+  }
 
   async function signIn(u, e) {
     e && e.preventDefault();
     try {
       const acc = await api.login(u.email, u.password);
-      localStorage.setItem('token', acc.token);
-      localStorage.setItem('refreshToken', acc.refreshToken);
-      localStorage.setItem('user', JSON.stringify(acc));
-      onLogin(acc);
+      await setSession(acc);
     } catch (e2) { setErr(e2.message); setBusy(''); }
   }
 
@@ -147,22 +159,101 @@ function Login({ onLogin }) {
     await signIn(acc);
   }
 
+  async function doRegister(e) {
+    e.preventDefault();
+    setErr(''); setInfo('');
+    if (rPass !== rPass2) { setErr('Пароли не совпадают.'); return; }
+    setBusy('register');
+    try {
+      await api.register(rEmail.trim(), rName.trim(), rPass);
+      setREmail(rEmail.trim());
+      setMode('verify');
+      setVCode('');
+      setInfo('Код подтверждения отправлен на ' + rEmail.trim() + '. В демо письмо приходит в Mailpit — откройте «Почта» слева.');
+    } catch (e2) { setErr(e2.message); }
+    setBusy('');
+  }
+
+  async function doConfirm(e) {
+    e.preventDefault();
+    setErr(''); setInfo('');
+    setBusy('confirm');
+    try {
+      const acc = await api.confirmRegistration(rEmail, vCode.trim());
+      await setSession(acc);
+    } catch (e2) { setErr(e2.message); }
+    setBusy('');
+  }
+
+  async function doResend() {
+    setErr(''); setInfo('');
+    setBusy('resend');
+    try {
+      await api.resendRegistrationCode(rEmail);
+      setInfo('Новый код отправлен. Повторный запрос — не чаще раза в минуту.');
+    } catch (e2) { setErr(e2.message); }
+    setBusy('');
+  }
+
   return (
     <div className="login-wrap">
-      <form className="card login" onSubmit={submit}>
-        <h2>Вход в систему</h2>
-        <label>Email
-          <input value={email} onChange={(e) => setEmail(e.target.value)} />
-        </label>
-        <label>Пароль
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
-        {err && <div className="error">{err}</div>}
-        <div className="row">
-          <button disabled={!!busy}>Войти</button>
-          <a href="/swagger" target="_blank" rel="noreferrer">Swagger API</a>
-        </div>
-      </form>
+      {mode === 'login' && (
+        <form className="card login" onSubmit={submit}>
+          <h2>Вход в систему</h2>
+          <label>Email
+            <input value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <label>Пароль
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </label>
+          {err && <div className="error">{err}</div>}
+          <div className="row">
+            <button disabled={!!busy}>Войти</button>
+            <a href="/swagger" target="_blank" rel="noreferrer">Swagger API</a>
+          </div>
+          <p className="dim alt"><button type="button" className="link" onClick={() => { setMode('register'); setErr(''); }}>Нет аккаунта? Зарегистрироваться</button></p>
+        </form>
+      )}
+
+      {mode === 'register' && (
+        <form className="card login" onSubmit={doRegister}>
+          <h2>Регистрация</h2>
+          <label>Имя
+            <input value={rName} onChange={(e) => setRName(e.target.value)} placeholder="Иван Иванов" />
+          </label>
+          <label>Email
+            <input type="email" value={rEmail} onChange={(e) => setREmail(e.target.value)} placeholder="you@company.ru" />
+          </label>
+          <label>Пароль
+            <input type="password" value={rPass} onChange={(e) => setRPass(e.target.value)} placeholder="минимум 8 символов" />
+          </label>
+          <label>Повторите пароль
+            <input type="password" value={rPass2} onChange={(e) => setRPass2(e.target.value)} />
+          </label>
+          {err && <div className="error">{err}</div>}
+          <div className="row">
+            <button disabled={!!busy}>Получить код</button>
+            <button type="button" className="ghost sm" onClick={() => { setMode('login'); setErr(''); }}>← Вход</button>
+          </div>
+          <p className="dim">Код придёт письмом на почту (в демо — в Mailpit). Действителен 10 минут.</p>
+        </form>
+      )}
+
+      {mode === 'verify' && (
+        <form className="card login" onSubmit={doConfirm}>
+          <h2>Подтверждение регистрации</h2>
+          {info && <div className="ok">{info}</div>}
+          <label>Код из письма
+            <input value={vCode} onChange={(e) => setVCode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" placeholder="6 цифр" autoComplete="one-time-code" />
+          </label>
+          {err && <div className="error">{err}</div>}
+          <div className="row">
+            <button disabled={!!busy || vCode.length !== 6}>Подтвердить</button>
+            <button type="button" className="ghost sm" disabled={!!busy} onClick={doResend}>{busy === 'resend' ? 'Отправка…' : 'Выслать код снова'}</button>
+          </div>
+          <p className="dim alt"><button type="button" className="link" onClick={() => { setMode('login'); setErr(''); setInfo(''); }}>← Вернуться ко входу</button></p>
+        </form>
+      )}
 
       <div className="card login quick">
         <h3>Быстрый вход (демо)</h3>

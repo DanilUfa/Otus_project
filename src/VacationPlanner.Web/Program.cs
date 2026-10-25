@@ -195,6 +195,33 @@ api.MapPost("/auth/login", async (LoginRequest request, AuthService auth, LoginT
    .WithName("Login")
    ;
 
+// Регистрация: код подтверждения отправляется на почту (код живёт в Redis-кэше с TTL 10 мин).
+api.MapPost("/auth/register", async (RegisterRequest request, RegistrationService reg, CancellationToken ct)
+        => {
+            await reg.RequestAsync(request, ct);
+            return Results.Ok(new { message = "Код подтверждения отправлен на вашу почту." });
+        })
+   .DisableAntiforgery()
+   .WithName("Register")
+   ;
+
+// Подтверждение кодом из письма: создаёт пользователя и сразу возвращает пару access+refresh.
+api.MapPost("/auth/register/confirm", async (ConfirmRegistrationRequest request, RegistrationService reg, AuthService auth, CancellationToken ct)
+        => Results.Ok(await auth.IssueInitialPairAsync(await reg.ConfirmAsync(request, ct), ct)))
+   .DisableAntiforgery()
+   .WithName("ConfirmRegistration")
+   ;
+
+// Повторная отправка кода: не чаще раза в минуту (коoldown в Redis).
+api.MapPost("/auth/register/resend", async (ResendRegistrationRequest request, RegistrationService reg, CancellationToken ct)
+        => {
+            await reg.ResendAsync(request, ct);
+            return Results.Ok(new { message = "Новый код отправлен на вашу почту." });
+        })
+   .DisableAntiforgery()
+   .WithName("ResendRegistrationCode")
+   ;
+
 // Ротация refresh-токена: старый отзывается, выдаётся новая пара access+refresh.
 api.MapPost("/auth/refresh", async (RefreshRequest request, AuthService auth, CancellationToken ct)
         => {

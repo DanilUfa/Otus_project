@@ -9,6 +9,9 @@ public interface IUserRepository
     Task<User?> GetByEmailAsync(string email, CancellationToken ct = default);
     Task<List<User>> GetAllAsync(CancellationToken ct = default);
 
+    /// <summary>Добавляет пользователя (после подтверждения регистрации).</summary>
+    Task AddAsync(User user, CancellationToken ct = default);
+
     /// <summary>Сохраняет изменения (например, плавающий апгрейд хэша пароля).</summary>
     Task SaveAsync(CancellationToken ct = default);
 }

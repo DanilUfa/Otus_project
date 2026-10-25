@@ -53,6 +53,10 @@ public class AuthService(
         return await RotateAsync(token, user, ct);
     }
 
+    /// <summary>Выдаёт пару токенов только что зарегистрированному (подтверждённому) пользователю.</summary>
+    public Task<LoginResponse> IssueInitialPairAsync(User user, CancellationToken ct = default)
+        => IssuePairAsync(user, ct);
+
     /// <summary>Отзывает refresh-токен (logout). Идемпотентно.</summary>
     public async Task LogoutAsync(string refreshToken, CancellationToken ct = default)
     {

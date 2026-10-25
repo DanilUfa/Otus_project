@@ -60,6 +60,7 @@ public class OutboxPublisherHostedService(
                     nameof(LeaveRequestSubmitted) => JsonSerializer.Deserialize<LeaveRequestSubmitted>(m.Payload)!,
                     nameof(LeaveRequestStatusChanged) => JsonSerializer.Deserialize<LeaveRequestStatusChanged>(m.Payload)!,
                     nameof(LeaveAttachmentAdded) => JsonSerializer.Deserialize<LeaveAttachmentAdded>(m.Payload)!,
+                    nameof(EmailVerificationRequested) => JsonSerializer.Deserialize<EmailVerificationRequested>(m.Payload)!,
                     _ => throw new InvalidOperationException($"Неизвестный тип outbox: {m.Type}")
                 };
                 await publishEndpoint.Publish(evt, ct);

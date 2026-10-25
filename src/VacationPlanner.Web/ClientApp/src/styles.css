@@ -51,6 +51,10 @@ table.cal th:not(:first-child), table.cal td:not(:first-child) { text-align: cen
 .cal-yes { color: var(--brand); }
 
 .error { color: var(--warn); font-size: 14px; }
+.ok { color: #0f8438; font-size: 14px; line-height: 1.4; }
+.dim.alt { margin-top: 4px; }
+.card .link { background: none; border: none; color: var(--brand); cursor: pointer; padding: 0; font-size: 13px; }
+.card .link:hover { text-decoration: underline; }
 .ok { color: var(--ok); font-size: 14px; }
 .dim { color: var(--muted); font-size: 14px; }
 

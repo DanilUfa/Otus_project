@@ -16,6 +16,7 @@ builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<LeaveRequestSubmittedConsumer>();
     x.AddConsumer<LeaveRequestStatusChangedConsumer>();
+    x.AddConsumer<EmailVerificationConsumer>();
     x.UsingRabbitMq((ctx, cfg) =>
     {
         cfg.Host(rabbit["Host"] ?? "localhost", "/", h =>
@@ -25,6 +26,7 @@ builder.Services.AddMassTransit(x =>
         });
         cfg.ReceiveEndpoint("notifier-leave-submitted", e => e.ConfigureConsumer<LeaveRequestSubmittedConsumer>(ctx));
         cfg.ReceiveEndpoint("notifier-leave-status-changed", e => e.ConfigureConsumer<LeaveRequestStatusChangedConsumer>(ctx));
+        cfg.ReceiveEndpoint("notifier-email-verification", e => e.ConfigureConsumer<EmailVerificationConsumer>(ctx));
     });
 });
 

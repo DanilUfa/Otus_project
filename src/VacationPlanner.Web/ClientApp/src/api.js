@@ -15,7 +15,7 @@ const refreshToken = () => localStorage.getItem('refreshToken');
 
 // Эндпоинты, для которых 401 не означает «сессия истекла»
 // (login — неверный пароль; refresh/logout — сами про токен).
-const AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/logout']);
+const AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/auth/register', '/api/auth/register/confirm', '/api/auth/register/resend']);
 
 // Слушатели «сессия истекла» (refresh не удался — UI должен вернуться к экрану входа).
 const sessionExpiredHandlers = [];
@@ -100,6 +100,10 @@ export const api = {
     request('/api/auth/login', { method: 'POST', body: { email, password } }),
 
   // Отзыв refresh-токена на сервере (best-effort: даже если токен уже невалиден — чтим локаль).
+  register: (email, name, password) => request('/api/auth/register', { method: 'POST', body: { email, name, password } }),
+  confirmRegistration: (email, code) => request('/api/auth/register/confirm', { method: 'POST', body: { email, code } }),
+  resendRegistrationCode: (email) => request('/api/auth/register/resend', { method: 'POST', body: { email } }),
+
   logout: () => {
     const rt = refreshToken();
     return rt

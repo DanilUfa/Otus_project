@@ -300,7 +300,7 @@ function AttachCell({ leaveId, canModify }) {
 
   return (
     <span className="att">
-      <button className="ghost sm" type="button" onClick={toggle}>📎{items ? items.length : ''}</button>
+      <button className="ghost sm att-btn" type="button" onClick={toggle}>📎{items && items.length > 0 && <span className="att-count">{items.length}</span>}</button>
       {open && (
         <div className="att-list card">
           {err && <div className="error">{err}</div>}

@@ -9,8 +9,6 @@
     <ProjectReference Include="..\VacationPlanner.Application\VacationPlanner.Application.csproj" />
     <ProjectReference Include="..\VacationPlanner.Infrastructure\VacationPlanner.Infrastructure.csproj" />
     <PackageReference Include="MassTransit.RabbitMQ" Version="8.4.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="*" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="*" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="*" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
   </ItemGroup>
 </Project>

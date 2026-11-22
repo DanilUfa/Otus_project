@@ -20,23 +20,7 @@ internal sealed class ImportRunner(JobStore store, LeaveApi api, ImportSettings 
         Action<ImportJob> finish;
         try
         {
-            await foreach (var record in file.RowsAsync(ct))
-            {
-                var (row, issue) = RowValidator.Parse(record, owner);
-                Guid? reserved = null;
-                var result = new ApiResult(null, issue);
-                if (row != null)
-                {
-                    if (await store.ReserveAsync(id, record.Line, row.RequestId, ct))
-                    {
-                        reserved = row.RequestId;
-                        result = await api.SubmitAsync(row.Payload, ct);
-                    }
-                    else result = new(null, new("Duplicate", "RequestId already reserved; inspect the original dispatch."));
-                }
-                using var save = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                await store.RecordAsync(id, record.Line, reserved, result, save.Token);
-            }
+            await new RowPipeline(store, api, settings).RunAsync(file, owner, id, lease, ct);
             ct.ThrowIfCancellationRequested();
             finish = j => j.Complete();
         }
@@ -48,6 +32,9 @@ internal sealed class ImportRunner(JobStore store, LeaveApi api, ImportSettings 
             finish = j => j.Fail(reason);
         }
         using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        return await store.ChangeAsync(id, finish, cleanup.Token);
+        var job = await store.ChangeAsync(id, finish, cleanup.Token);
+        logger.LogInformation("Finished job {JobId} with {Status}, {Imported} imported, {Errors} errors",
+            job.Id, job.Status, job.ImportedRows, job.ErrorRows);
+        return job;
     }
 }

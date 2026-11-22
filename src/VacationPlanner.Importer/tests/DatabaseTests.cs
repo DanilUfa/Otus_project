@@ -20,7 +20,7 @@ public sealed class PostgreSqlFact : FactAttribute
     }
 }
 
-public sealed class DatabaseTests : IAsyncLifetime
+public sealed partial class DatabaseTests : IAsyncLifetime
 {
     private readonly string dbName = "importer_test_" + Guid.NewGuid().ToString("N");
     private readonly string? admin = Environment.GetEnvironmentVariable("IMPORTER_TEST_POSTGRES");

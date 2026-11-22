@@ -1,0 +1,14 @@
+**
+!VacationPlanner.Importer.csproj
+!*.cs
+!appsettings.json
+!Csv/
+!Csv/**
+!Enums/
+!Enums/**
+!Http/
+!Http/**
+!Models/
+!Models/**
+!Persistence/
+!Persistence/**

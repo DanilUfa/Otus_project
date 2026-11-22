@@ -43,12 +43,14 @@ internal sealed class JobStore(IDbContextFactory<ImporterDbContext> contexts)
         return job.Id;
     }
 
-    public async Task<bool> ReserveAsync(int job, int line, Guid request, CancellationToken ct)
+    public async Task<RowIssue?> ReserveAsync(int job, int line, Guid request, CancellationToken ct)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         var inserted = await db.Database.ExecuteSqlInterpolatedAsync(
             $"""INSERT INTO "Dispatches" ("RequestId", "ImportJobId", "RowNumber", "Rejected") VALUES ({request}, {job}, {line}, false) ON CONFLICT ("RequestId") DO NOTHING""", ct);
-        return inserted == 1;
+        if (inserted == 1) return null;
+        var original = await db.Dispatches.AsNoTracking().SingleAsync(d => d.RequestId == request, ct);
+        return new("Duplicate", $"RequestId already reserved by job {original.ImportJobId}, line {original.RowNumber}.");
     }
 
     // Only one caller at a time may mutate a given job (including heartbeat and finalization).

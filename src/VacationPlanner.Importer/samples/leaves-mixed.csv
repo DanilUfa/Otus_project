@@ -1,0 +1,4 @@
+RequestId,UserId,Type,StartDate,EndDate,Reason
+a393aa43-15a5-45fb-9e1c-fd1059ec3603,2,Unpaid,2030-07-10,2030-07-11,
+a393aa43-15a5-45fb-9e1c-fd1059ec3604,2,Annual,2030-02-30,2030-03-01,
+a393aa43-15a5-45fb-9e1c-fd1059ec3605,2,Sick,2030-07-11,2030-07-13,

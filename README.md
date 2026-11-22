@@ -242,3 +242,7 @@ src/
 - [ ] Decorator (аудит через перехват уведомлений)
 - [ ] Keycloak (OIDC) вместо встроенного JWT (сейчас — локальный JWT с ролями)
 - [ ] Kafka как второй транспорт MassTransit
+
+## Импорт заявок из CSV
+
+[Запуск импортёра, примеры CSV и сценарий защиты](src/VacationPlanner.Importer/README.md).

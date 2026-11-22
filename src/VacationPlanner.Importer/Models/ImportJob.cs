@@ -1,6 +1,3 @@
-﻿using System.Data.Common;
-using System.Diagnostics.CodeAnalysis;
-using System.Reflection.Metadata;
 using VacationPlanner.Importer.Enums;
 
 namespace VacationPlanner.Importer.Models;

@@ -10,8 +10,39 @@ networks:
 
 volumes:
   pgdata:
+  importerdata:
 
 services:
+  importer-db:
+    image: postgres:16-alpine
+    profiles: ["importer"]
+    environment:
+      POSTGRES_DB: vacation_importer
+      POSTGRES_USER: importer
+      POSTGRES_PASSWORD: ${IMPORTER_DB_PASSWORD:-}
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: [importerdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U importer -d vacation_importer"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+    networks: [vacnet]
+
+  importer:
+    profiles: ["importer"]
+    build: ./src/VacationPlanner.Importer
+    environment:
+      ConnectionStrings__Importer: Host=importer-db;Database=vacation_importer;Username=importer;GSS Encryption Mode=Disable
+      PGPASSWORD: ${IMPORTER_DB_PASSWORD:-}
+      Importer__BaseUrl: http://gateway/
+      Importer__Token: ${Importer__Token:-}
+    volumes:
+      - ${IMPORTER_INPUT_DIR:-./src/VacationPlanner.Importer/samples}:/input:ro
+    depends_on:
+      importer-db: { condition: service_healthy }
+    networks: [vacnet]
+
   postgres:
     image: postgres:16-alpine
     environment:

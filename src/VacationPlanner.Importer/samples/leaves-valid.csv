@@ -1,0 +1,3 @@
+RequestId,UserId,Type,StartDate,EndDate,Reason
+a393aa43-15a5-45fb-9e1c-fd1059ec3601,2,Sick,2030-05-06,2030-05-07,
+a393aa43-15a5-45fb-9e1c-fd1059ec3602,2,Unpaid,2030-06-10,2030-06-11,"Demo, day off"

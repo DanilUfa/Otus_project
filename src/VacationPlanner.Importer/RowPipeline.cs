@@ -1,4 +1,3 @@
-using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
 using VacationPlanner.Importer.Csv;
@@ -28,7 +27,11 @@ internal sealed class RowPipeline(JobStore store, LeaveApi api, ImportSettings s
             catch { await stop.CancelAsync(); throw; }
         }
 
-        var heartbeat = Supervise(() => HeartbeatAsync(lease, job, stop.Token));
+        var heartbeat = Supervise(async () =>
+        {
+            try { await HeartbeatAsync(lease, job, stop.Token); }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+        });
         var workers = Enumerable.Range(0, settings.Workers).Select(_ => Supervise(async () =>
         {
             await foreach (var work in channel.Reader.ReadAllAsync(stop.Token))
@@ -45,19 +48,13 @@ internal sealed class RowPipeline(JobStore store, LeaveApi api, ImportSettings s
             finally { channel.Writer.TryComplete(); }
         });
 
-        var rows = Task.WhenAll(workers.Append(producer));
-        try { await rows; }
-        catch { /* Inspect all stages after heartbeat has stopped. */ }
-        finally { await stop.CancelAsync(); }
-        try { await heartbeat; }
-        catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-        if (rows.Exception is { } fault)
+        async Task FinishRowsAsync()
         {
-            var cause = fault.Flatten().InnerExceptions.FirstOrDefault(e => e is not OperationCanceledException) ?? fault;
-            ExceptionDispatchInfo.Capture(cause).Throw();
+            try { await Task.WhenAll(workers.Append(producer)); }
+            finally { await stop.CancelAsync(); }
         }
+        await Task.WhenAll(FinishRowsAsync(), heartbeat);
         ct.ThrowIfCancellationRequested();
-        await rows;
     }
 
     private static async Task ProduceAsync(ChannelWriter<Work> channel, CsvSnapshot file, int owner, CancellationToken ct)
@@ -97,12 +94,13 @@ internal sealed class RowPipeline(JobStore store, LeaveApi api, ImportSettings s
         var result = new ApiResult(null, work.Issue);
         if (work.Row is { } row)
         {
-            if (await store.ReserveAsync(job, work.Line, row.RequestId, ct))
+            var duplicate = await store.ReserveAsync(job, work.Line, row.RequestId, ct);
+            if (duplicate == null)
             {
                 reserved = row.RequestId;
                 result = await api.SubmitAsync(row.Payload, ct);
             }
-            else result = new(null, new("Duplicate", "RequestId already reserved; inspect the original dispatch."));
+            else result = new(null, duplicate);
         }
 
         // Finish recording a known outcome even if a sibling or Ctrl+C has stopped intake.

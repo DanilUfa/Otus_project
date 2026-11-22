@@ -12,6 +12,9 @@ using VacationPlanner.Importer.Persistence;
 
 using var stop = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Cancel(); };
+using var termination = OperatingSystem.IsWindows() ? null :
+    System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM,
+        signal => { signal.Cancel = true; stop.Cancel(); });
 var ct = stop.Token;
 if (args is ["--help"] or ["-h"]) return Usage(0);
 bool jobCommand = args is ["status" or "errors" or "dispatches", "--job", _];
@@ -65,7 +68,7 @@ try
             var runner = provider.GetRequiredService<ImportRunner>();
             var result = await runner.RunAsync(args[2], owner, ct);
             Print(result);
-            await PrintErrors(db, result.Id, ct.IsCancellationRequested ? CancellationToken.None : ct);
+            if (!ct.IsCancellationRequested) await PrintErrors(db, result.Id, ct);
             return result.Status switch { ImportStatus.DoneSuccessfully => 0, ImportStatus.DoneWithErrors => 3,
                 ImportStatus.Canceled => 130, _ => 4 };
         case "list":

@@ -28,7 +28,8 @@ internal sealed class ImportRunner(JobStore store, LeaveApi api, ImportSettings 
         catch (Exception ex)
         {
             string reason = ex is ApiFailure ? ex.Message : $"Import interrupted ({ex.GetType().Name}).";
-            logger.LogError("Job {JobId} failed: {Reason}", id, reason);
+            logger.LogError("Job {JobId} failed: {Reason}. {StackTrace}", id, reason,
+                new System.Diagnostics.StackTrace(ex, false));
             finish = j => j.Fail(reason);
         }
         using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(15));

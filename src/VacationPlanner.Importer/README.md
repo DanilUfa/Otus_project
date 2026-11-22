@@ -78,11 +78,31 @@ docker compose --profile importer run --rm importer list
 
 ## Проверка и демонстрация OTUS
 
+Все четыре технических критерия можно продемонстрировать в самом `VacationPlanner.Importer`.
+
+| Критерий из ТЗ | Что показать в импортёре | Как проверить |
+|---|---|---|
+| База данных (10 баллов) | [JobStore](Persistence/JobStore.cs) резервирует UUID перед POST, затем сохраняет подтверждённый результат и счётчик в одной транзакции. [ImporterDbContext](Persistence/ImporterDbContext.cs) описывает собственные таблицы и миграции. | `SequentialMixedAndReplay` применяет миграцию к пустой PostgreSQL, перечитывает задачу, ошибку и ID заявки, затем проверяет повторный импорт. |
+| Асинхронность (5 баллов) | От чтения CSV до HTTP и записи в БД передаётся `CancellationToken`. При отмене уже полученный ответ сохраняется с отдельным ограниченным по времени токеном. | `HeartbeatCancellationAndRestart` отменяет ожидающий HTTP-вызов, проверяет сохранение Canceled и запускает файл повторно. |
+| Примитивы синхронизации (15 баллов) | В [RowPipeline](RowPipeline.cs) ограниченный `Channel<T>` останавливает чтение при заполнении очереди. `SemaphoreSlim` сериализует запись результатов. Для зависимых строк продюсер ждёт завершения предыдущей записи. | `BoundedWorkersPersistEveryOutcomeOnce` проверяет четыре одновременных запроса и результат всех 160 строк. `ConflictingRowsPreserveCsvOrder` проверяет порядок конфликтующих заявок. |
+| Три паттерна (30 баллов) | Facade, Adapter и Iterator в рабочем пути команды `import`. | Пройти цепочку от вызова CLI до ответа API по таблице ниже. |
+
+| Паттерн | Участники и задача | Наблюдаемое поведение |
+|---|---|---|
+| **Facade (Фасад)** | Команда `import` в [Program.cs](Program.cs) вызывает [ImportRunner.RunAsync](ImportRunner.cs). За одним вызовом стоят проверка файла, получение блокировки, регистрация задачи, запуск обработчиков и сохранение итогового статуса. | `InvalidPreflightLeavesNoJob` вызывает фасад с пустым CSV и проверяет отсутствие задачи. `SequentialMixedAndReplay` через тот же метод получает задачу с частичным успехом. |
+| **Adapter (Адаптер)** | [LeaveApi.SubmitAsync](Http/LeaveApi.cs) переводит заявку строки в JSON для `POST /api/leave`, а HTTP-статус и тело ответа — в `ApiResult` либо `ApiFailure`. Обработчик строки получает ID созданной заявки или причину отказа. | `ApiTests.SendsOnceAndClassifies` проверяет метод, маршрут и сериализацию, затем результаты при 201, бизнес-отказе и сбое сервиса. |
+| **Iterator (Итератор)** | [CsvSnapshot.RowsAsync](Csv/CsvSnapshot.cs) выдаёт по одному `CsvRecord` через `yield return`. При предварительной проверке записи считает `OpenAsync`, при импорте их читает продюсер через `await foreach`. Кавычки, многострочные поля и номера физических строк обрабатываются внутри итератора. | `ReadsOriginalSnapshotWithBomQuotesAndPhysicalLineNumbers` проверяет повторный проход после удаления исходника, содержимое многострочного поля и номер следующей записи. |
+
+Для критерия объёма работы участника (30 баллов) предъявите собственный результат целиком: CLI, CSV, HTTP-интеграцию, схему БД, дедупликацию, параллельную обработку, восстановление и тесты. Состав команды и распределение ответственности подтверждаются на защите. Ещё 10 баллов относятся к фактическому сроку защиты.
+
+Из корня репозитория выполните проверку проекта тестов импортёра. Ссылка на основной проект в тестовом проекте включает его в restore и build.
+
 ```powershell
-dotnet restore VacationPlanner.sln
-dotnet build VacationPlanner.sln --no-restore
+$tests = './src/VacationPlanner.Importer/tests/VacationPlanner.Importer.Tests.csproj'
+dotnet restore $tests
+dotnet build $tests --no-restore
 $env:IMPORTER_TEST_POSTGRES = 'Host=127.0.0.1;Port=55432;Database=postgres;Username=importer'
-dotnet test VacationPlanner.sln --no-build
+dotnet test $tests --no-build
 ```
 
 Интеграционные тесты создают собственные базы со случайными именами, применяют миграции и удаляют эти базы после теста. Роли нужен CREATEDB. Пароль может поступать из PGPASSWORD. Без IMPORTER_TEST_POSTGRES эти тесты помечаются как пропущенные.
@@ -93,6 +113,6 @@ dotnet test VacationPlanner.sln --no-build
 2. Импортировать смешанный файл, показать errors и сверить сумму счётчиков с TotalRows. Повторить импорт и показать Duplicate.
 3. Показать отмену и перезапуск в тесте HeartbeatCancellationAndRestart. Отключение API проверяет LostResponseStopsWorkersAndRecoveryOnlyFailsStaleJobs.
 4. Открыть RowPipeline. Ограниченный Channel создаёт backpressure, число workers ограничивает одновременные POST. Продюсер ждёт зависимые строки по UUID, интервалам отпуска и годовому балансу. SemaphoreSlim сериализует фиксацию результатов. Каждый worker получает отдельный DbContext на операцию. Таймер меняет только колонку HeartbeatAt на соединении-владельце задачи.
-5. Показать Builder в LeaveRequestBuilder (сборка и проверка заявки), State в LeaveState (переходы из Draft и Submitted), Observer в связке OutboxPublisherHostedService и LeaveRequestSubmittedConsumer (публикация и подписка). Паттерны относятся к работающему Vacation Planner. В импортёре HTTP-адаптер LeaveApi переводит ответ сервиса в результат строки.
+5. Открыть команду `import` и пройти по трём участкам кода из таблицы паттернов: вызов фасада, выдача строки итератором и перевод ответа адаптером. Сопоставить полученный результат с CLI-командами `status`, `errors` и `dispatches`.
 
 [Формат CSV](../../docs/importer/CSV_FORMAT.md).

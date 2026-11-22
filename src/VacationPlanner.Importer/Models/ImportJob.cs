@@ -7,10 +7,9 @@ namespace VacationPlanner.Importer.Models;
 
 internal sealed class ImportJob
 {
-    [SetsRequiredMembers]
     public ImportJob(string filePath, int totalRows)
     {
-        ArgumentNullException.ThrowIfNull(filePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         if (totalRows <= 0)
             throw new ArgumentException($"{nameof(totalRows)} can't be lower or equals to 0");
 
@@ -19,14 +18,14 @@ internal sealed class ImportJob
     }
 
     public int Id { get; init; }
-    public required string FilePath { get; init; }
+    public string FilePath { get; private set; }
     public ImportStatus Status { get; private set; } = ImportStatus.InProcess;
 
     public int TotalRows { get; private set; }
     public int ImportedRows { get; private set; }
     public int ErrorRows { get; private set; }
 
-    public DateTime StartedAt { get; } = DateTime.UtcNow;
+    public DateTime StartedAt { get; private set; } = DateTime.UtcNow;
     public DateTime? HeartbeatAt { get; private set; }
     public DateTime? FinishedAt { get; private set; }
 

@@ -358,16 +358,17 @@ api.MapGet("/holidays", async (int? year, AppDbContext db, CancellationToken ct)
 
 // ---------- Balance ----------
 api.MapGet("/balance/{userId:int}", async (
-        int userId, [FromQuery] int? year, BalanceService balance, IDistributedCache cache,
+        int userId, [FromQuery] int? year, BalanceService balance, HttpContext context,
         ClaimsPrincipal user, CancellationToken ct)
         => {
             if (!user.IsInRole(UserRole.Manager.ToString()) && GetUserId(user) != userId)
                 throw new UnauthorizedAccessException("Запрос баланса другого сотрудника доступен руководителю.");
 
             var y = year ?? DateTime.UtcNow.Year;
-            var remaining = await cache.GetOrSetAsync($"balance:{userId}:{y}",
-                () => balance.GetRemainingAnnualDaysAsync(userId, y, ct),
-                TimeSpan.FromSeconds(60), ct);
+            // Balance changes on submission/cancellation/decision, including CSV imports.
+            // Read the primary database so an old in-flight cache fill cannot restore stale quota.
+            context.Response.Headers.CacheControl = "no-store";
+            var remaining = await balance.GetRemainingAnnualDaysAsync(userId, y, ct);
             return Results.Ok(new { year = y, remaining });
         })
    .RequireAuthorization("AuthenticatedOnly")

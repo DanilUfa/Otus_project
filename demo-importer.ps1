@@ -161,10 +161,9 @@ try {
     @{ result='passed'; label=$label; createdLeaveIds=@($created.id); successJob=$successJob;
         mixedJob=$mixedJob; repeatJob=$repeatJob; inputDirectory=$runDir } |
         ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $runDir 'result.json') -Encoding UTF8
-    Write-Host "`nДЕМОНСТРАЦИЯ ПРОЙДЕНА. Создано ровно 3 заявки." -ForegroundColor Green
+    Write-Host "`nСоздано заявок: $($created.Count)." -ForegroundColor Green
     Write-Host "CSV, отчёт и журнал: $runDir"
     Write-Host 'Повторный запуск подберёт новые свободные даты и сохранит предыдущие результаты.'
-    Write-Host 'В коде: Program.cs -> ImportRunner -> CsvSnapshot -> RowPipeline -> LeaveApi / JobStore.'
 } catch {
     Write-Host "`nОШИБКА: $($_.Exception.Message)" -ForegroundColor Red
     exit 1

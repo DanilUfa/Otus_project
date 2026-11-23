@@ -74,6 +74,18 @@ builder.Services
                 Encoding.UTF8.GetBytes(jwt["Key"] ?? throw new InvalidOperationException("Jwt:Key не задан."))),
             ClockSkew = TimeSpan.FromSeconds(30)
         };
+        // Browser WebSockets/SSE carry the same JWT in the query string rather than a header.
+        // Authenticate it before SignalR checks the identity of a negotiated connection.
+        o.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var token = context.Request.Query["access_token"].ToString();
+                if (!string.IsNullOrEmpty(token) && context.HttpContext.Request.Path.StartsWithSegments("/hubs/vacation"))
+                    context.Token = token;
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorizationBuilder()
@@ -84,6 +96,7 @@ builder.Services.AddAuthorizationBuilder()
 var rabbit = builder.Configuration.GetSection("RabbitMq");
 builder.Services.AddMassTransit(x =>
 {
+    x.AddConsumer<CalendarUpdatedConsumer>();
     x.UsingRabbitMq((ctx, cfg) =>
     {
         cfg.Host(rabbit["Host"] ?? "localhost", "/", h =>
@@ -91,6 +104,7 @@ builder.Services.AddMassTransit(x =>
             h.Username(rabbit["Username"] ?? "vac");
             h.Password(rabbit["Password"] ?? "vac");
         });
+        cfg.ReceiveEndpoint("web-calendar-updated", e => e.ConfigureConsumer<CalendarUpdatedConsumer>(ctx));
     });
 });
 

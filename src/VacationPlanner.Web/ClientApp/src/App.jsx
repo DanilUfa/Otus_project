@@ -14,6 +14,7 @@ export default function App() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || 'null'));
   const [error, setError] = useState('');
   const [, force] = useState(0);
+  const [calendarRevision, setCalendarRevision] = useState(0);
 
   useEffect(() => { if (user) refresh(); }, [user]);
 
@@ -32,7 +33,19 @@ export default function App() {
       .build();
     conn.on('LeaveCreated', refresh);
     conn.on('LeaveStatusChanged', refresh);
-    conn.start().catch(() => { /* SignalR опционален */ });
+    conn.on('CalendarUpdated', () => {
+      refresh();
+      setCalendarRevision(value => value + 1);
+    });
+    conn.onreconnected(() => {
+      refresh();
+      setCalendarRevision(value => value + 1);
+    });
+    conn.start().then(() => {
+      refresh();
+      setCalendarRevision(value => value + 1);
+    })
+      .catch(() => { /* SignalR опционален */ });
     return () => { conn.stop().catch(() => {}); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
@@ -47,11 +60,7 @@ export default function App() {
       sessionStorage.setItem('leaves', JSON.stringify(leaves));
       sessionStorage.setItem('users', JSON.stringify(users));
       sessionStorage.setItem('balance', JSON.stringify(balance));
-      // Read-модель (CQRS): календарь отдела берём из микросервиса reporting; best-effort.
-      try {
-        const rep = await api.reportCalendar(YEAR);
-        sessionStorage.setItem('report', JSON.stringify(rep));
-      } catch { sessionStorage.removeItem('report'); }
+      setError('');
       force(x => x + 1);
     } catch (e) { setError(String(e.message)); }
   }
@@ -97,7 +106,7 @@ export default function App() {
 
         <YearCalendar />
 
-        <DayCalendar />
+        <DayCalendar revision={calendarRevision} />
       </main>
     </div>
   );

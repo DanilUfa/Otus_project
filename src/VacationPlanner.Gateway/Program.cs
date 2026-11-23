@@ -8,6 +8,7 @@ builder.Logging.ClearProviders(); // без EventLog: в docker его нет, �
 builder.Logging.AddConsole();
 builder.Logging.AddServiceErrorMetrics();
 var app = builder.Build();
+app.UseWebSockets();
 app.UseServiceMetrics();
 app.UseRouting();
 
@@ -159,12 +160,16 @@ static async Task ProxyWebSocketAsync(HttpContext ctx, Uri target, CancellationT
     foreach (var h in ctx.Request.Headers)
     {
         if (h.Key.Equals("Host", StringComparison.OrdinalIgnoreCase)) continue;
+        // ClientWebSocket generates its own hop-by-hop handshake headers and WebSocket key.
+        if (IsHopByHop(h.Key) || h.Key.StartsWith("Sec-WebSocket-", StringComparison.OrdinalIgnoreCase)) continue;
         try { client.Options.SetRequestHeader(h.Key, h.Value.ToString()); } catch { /* ignore restricted */ }
     }
+    foreach (var protocol in ctx.WebSockets.WebSocketRequestedProtocols)
+        client.Options.AddSubProtocol(protocol);
     try { await client.ConnectAsync(new Uri(wsUri), ct); }
     catch { ctx.Response.StatusCode = 502; await ctx.Response.WriteAsync("ws upstream unavailable", ct); return; }
 
-    using var server = await ctx.WebSockets.AcceptWebSocketAsync();
+    using var server = await ctx.WebSockets.AcceptWebSocketAsync(client.SubProtocol);
     await Task.WhenAll(PumpAsync(server, client, ct), PumpAsync(client, server, ct));
 }
 

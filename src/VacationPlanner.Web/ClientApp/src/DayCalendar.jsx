@@ -18,24 +18,31 @@ const monOffset = (year, m) => (new Date(year, m, 1).getDay() + 6) % 7; // 0 = �
  * (CQRS, best-effort); при смене года запрашивается /api/reports/calendar?year=Y.
  * Отмеченные сотрудники (чекбоксы) показывают свои отпуска; пересечение >=2 — красная рамка.
  */
-export default function AnnualCalendar() {
+export default function AnnualCalendar({ revision = 0 }) {
   const [year, setYear] = useState(CURRENT_YEAR);
-  const [report, setReport] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem('report')); } catch { return null; }
-  });
-  const raw = report && report.leaves ? JSON.stringify(report.leaves) : sessionStorage.getItem('leaves');
+  const [report, setReport] = useState(null);
+  const [loadError, setLoadError] = useState(false);
+  const raw = report?.year === year ? JSON.stringify(report.leaves) : null;
   const usersRaw = sessionStorage.getItem('users');
   const [sel, setSel] = useState(null);   // null = все, [] = никого, иначе массив id
   const [withPending, setWithPending] = useState(false);
   const [holidays, setHolidays] = useState({});   // 'YYYY-MM-DD' -> название
 
-  // Смена года: подтягиваем read-модель этого года (best-effort: кэш остаётся) и праздники.
+  // CalendarUpdated is raised after Reporting commits. Preserve the selected year and filters.
   useEffect(() => {
+    let active = true;
     api.reportCalendar(year)
-      .then((rep) => { setReport(rep); sessionStorage.setItem('report', JSON.stringify(rep)); })
-      .catch(() => setReport(null));
+      .then((rep) => { if (active) { setReport(rep); setLoadError(false); } })
+      .catch(() => { if (active) setLoadError(true); });
+    // Ignore late responses from older year/revision requests.
+    return () => { active = false; };
+  }, [year, revision]);
+
+  useEffect(() => {
+    let active = true;
     api.holidays(year)
       .then((list) => {
+        if (!active) return;
         const m = {};
         (list || []).forEach((h) => {
           const d = pd(h.date);
@@ -43,11 +50,12 @@ export default function AnnualCalendar() {
         });
         setHolidays(m);
       })
-      .catch(() => setHolidays({}));
+      .catch(() => { if (active) setHolidays({}); });
+    return () => { active = false; };
   }, [year]);
 
   if (!raw || !usersRaw) {
-    return <section className="year-cal"><h2>Годовой календарь отпусков · {year}</h2><div className="dim">Нет данных.</div></section>;
+    return <section className="year-cal"><h2>Годовой календарь отпусков · {year}</h2><div className="dim">{loadError ? 'Не удалось загрузить календарь.' : 'Загрузка календаря…'}</div></section>;
   }
 
   const users = JSON.parse(usersRaw);
@@ -126,6 +134,7 @@ export default function AnnualCalendar() {
   return (
     <section className="year-cal">
       <h2>Годовой календарь отпусков · {year}</h2>
+      {loadError && <div className="error">Не удалось обновить календарь. Показаны последние загруженные данные.</div>}
 
       <div className="y-legend">
         <span className="lg"><span className="sw app" />Утверждён</span>

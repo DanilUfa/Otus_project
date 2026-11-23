@@ -49,6 +49,8 @@ public class LeaveRequestSubmittedConsumer(
             }
         }
         log.LogInformation("READMODEL requestId={RequestId} upsert status=Submitted userId={UserId}", e.RequestId, e.UserId);
+        // Refresh clients only after the calendar projection is committed.
+        await context.Publish(new CalendarUpdated(e.StartDate.Year, e.EndDate.Year));
 
         static void Apply(ReadLeave row, LeaveRequestSubmitted ev)
         {

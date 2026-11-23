@@ -42,5 +42,7 @@ public class LeaveRequestStatusChangedConsumer(
         }
         await db.SaveChangesAsync(context.CancellationToken);
         log.LogInformation("READMODEL requestId={RequestId} status->{Status}", e.RequestId, e.Status);
+        // Refresh clients only after the calendar projection is committed.
+        await context.Publish(new CalendarUpdated(e.StartDate.Year, e.EndDate.Year));
     }
 }

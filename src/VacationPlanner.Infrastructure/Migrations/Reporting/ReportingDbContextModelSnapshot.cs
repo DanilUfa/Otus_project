@@ -36,6 +36,11 @@ namespace VacationPlanner.Infrastructure.Migrations.Reporting
                     b.Property<int>("RequestId")
                         .HasColumnType("integer");
 
+                    b.Property<long>("Revision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("timestamp with time zone");
 

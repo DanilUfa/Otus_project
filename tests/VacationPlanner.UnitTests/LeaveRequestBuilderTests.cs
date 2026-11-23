@@ -7,6 +7,19 @@ namespace VacationPlanner.UnitTests;
 
 public class LeaveRequestBuilderTests
 {
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(999)]
+    public void Unknown_type_is_rejected(int type)
+        => Assert.Throws<DomainValidationException>(() => new LeaveRequestBuilder().ForUser(1)
+            .OfType((LeaveType)type).Between(Dt("2028-06-01"), Dt("2028-06-02")).Build());
+
+    [Fact]
+    public void Reason_over_database_limit_is_rejected()
+        => Assert.Throws<DomainValidationException>(() => new LeaveRequestBuilder().ForUser(1)
+            .OfType(LeaveType.Annual).Between(Dt("2028-06-01"), Dt("2028-06-02"))
+            .Reason(new string('x', 501)).Build());
+
     private static DateTime Dt(string s) => DateTime.SpecifyKind(DateTime.Parse(s), DateTimeKind.Utc);
 
     [Fact]

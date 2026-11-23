@@ -17,4 +17,12 @@ public class OutboxMessage
     public DateTime? PublishedAt { get; set; }
     public int FailedCount { get; set; }
     public bool Failed { get; set; }
+    public DateTime? NextAttemptAt { get; set; }
+
+    public void ScheduleRetry(DateTime now)
+    {
+        FailedCount++;
+        Failed = false; // including legacy Failed rows: failures never permanently disable delivery
+        NextAttemptAt = now.AddSeconds(Math.Min(300, Math.Pow(2, Math.Min(FailedCount, 9))));
+    }
 }

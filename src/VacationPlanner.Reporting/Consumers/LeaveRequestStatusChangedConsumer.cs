@@ -1,48 +1,21 @@
 using MassTransit;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using VacationPlanner.Domain;
 using VacationPlanner.Domain.Events;
 using VacationPlanner.Infrastructure;
 
 namespace VacationPlanner.Reporting.Consumers;
 
-/// <summary>
-/// Микросервис <b>reporting</b>: статус изменён → обновляем/гасим read-модель в СВОЕЙ БД.
-/// </summary>
 public class LeaveRequestStatusChangedConsumer(
     IServiceScopeFactory scopeFactory,
     ILogger<LeaveRequestStatusChangedConsumer> log) : IConsumer<LeaveRequestStatusChanged>
 {
     public async Task Consume(ConsumeContext<LeaveRequestStatusChanged> context)
     {
-        var e = context.Message;
+        var message = context.Message;
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReportingDbContext>();
-
-        var row = await db.ReadLeaves.FirstOrDefaultAsync(r => r.RequestId == e.RequestId, context.CancellationToken);
-        if (row is null)
-        {
-            // Out-of-order: status-changed обслуживает консьюмер отдельной очереди и может
-            // прийти раньше, чем submitted создал read-модель. Не глотаем молча — exception
-            // заставляет UseMessageRetry переповторить (короткое окно, в норме хватает);
-            // если и после ретраев строки нет — событие уйдёт в DLQ (_error), а не потеряется.
-            throw new InvalidOperationException(
-                "READMODEL requestId=" + e.RequestId + " — read-модель ещё не создана (либо заявка не существует)");
-        }
-
-        if (e.Status == LeaveStatus.Declined || e.Status == LeaveStatus.Cancelled)
-        {
-            db.ReadLeaves.Remove(row);
-        }
-        else
-        {
-            row.Status = e.Status;
-            row.UpdatedAt = DateTime.UtcNow;
-        }
-        await db.SaveChangesAsync(context.CancellationToken);
-        log.LogInformation("READMODEL requestId={RequestId} status->{Status}", e.RequestId, e.Status);
-        // Refresh clients only after the calendar projection is committed.
-        await context.Publish(new CalendarUpdated(e.StartDate.Year, e.EndDate.Year));
+        await CalendarProjection.ApplyAsync(db, message, context.CancellationToken);
+        log.LogInformation("READMODEL requestId={RequestId} revision={Revision}", message.RequestId, message.Revision);
+        // Also republish on duplicate delivery: an earlier attempt may have committed before publish failed.
+        await context.Publish(new CalendarUpdated(message.StartDate.Year, message.EndDate.Year), context.CancellationToken);
     }
 }

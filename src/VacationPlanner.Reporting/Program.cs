@@ -58,9 +58,7 @@ builder.Services.AddMassTransit(x =>
         cfg.ReceiveEndpoint("reporting-leave-submitted", e => e.ConfigureConsumer<LeaveRequestSubmittedConsumer>(ctx));
         cfg.ReceiveEndpoint("reporting-leave-status-changed", e =>
         {
-            // At-least-once + конкурентные очереди: status-changed может прийти раньше submitted.
-            // Retry явно заставляет консьюмер пробовать догнать create (см. исключение в консьюмере);
-            // исчерпание попыток = DLQ (_error), а не тихая потеря события.
+            // Transient storage/publish failures are retried; out-of-order events are handled by revision.
             e.UseMessageRetry(r => r.Interval(5, TimeSpan.FromMilliseconds(500)));
             e.ConfigureConsumer<LeaveRequestStatusChangedConsumer>(ctx);
         });

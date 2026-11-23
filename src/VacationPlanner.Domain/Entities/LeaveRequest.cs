@@ -12,6 +12,7 @@ public class LeaveRequest
     public LeaveStatus Status { get; set; } = LeaveStatus.Draft;
     public string Reason { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public long Revision { get; set; }
 
     public int Days => (EndDate.Date - StartDate.Date).Days + 1;
 }

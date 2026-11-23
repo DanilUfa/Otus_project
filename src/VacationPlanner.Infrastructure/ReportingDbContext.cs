@@ -21,6 +21,7 @@ public class ReportingDbContext(DbContextOptions<ReportingDbContext> options) : 
             e.HasIndex(r => new { r.UserId, r.Status });
             e.HasIndex(r => new { r.StartDate, r.Status });
             e.Property(r => r.UserName).HasMaxLength(120);
+            e.Property(r => r.Revision).HasDefaultValue(0L);
         });
     }
 }

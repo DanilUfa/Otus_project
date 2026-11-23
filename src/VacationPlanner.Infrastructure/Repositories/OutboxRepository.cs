@@ -14,7 +14,7 @@ public class OutboxRepository(AppDbContext db) : IOutboxRepository
 
     public Task<List<OutboxMessage>> GetPendingAsync(int limit, CancellationToken ct = default)
         => db.OutboxMessages
-            .Where(m => !m.PublishedAt.HasValue && !m.Failed)
+            .Where(m => !m.PublishedAt.HasValue && (m.NextAttemptAt == null || m.NextAttemptAt <= DateTime.UtcNow))
             .OrderBy(m => m.CreatedAt)
             .Take(limit)
             .ToListAsync(ct);

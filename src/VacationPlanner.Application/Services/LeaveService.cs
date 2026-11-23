@@ -39,6 +39,7 @@ public class LeaveService(
             .Build();
 
         leaveRequest.Status = LeaveStatus.Submitted; // Draft → Submitted
+        leaveRequest.Revision = 1;
         LeaveState.For(LeaveStatus.Draft).EnsureCanTransitionTo(leaveRequest.Status);
 
         await unitOfWork.BeginAsync(ct);
@@ -57,7 +58,8 @@ public class LeaveService(
                 leaveRequest.EndDate,
                 leaveRequest.CreatedAt,
                 user.Email,
-                user.Manager?.Email ?? "");
+                user.Manager?.Email ?? "",
+                leaveRequest.Revision);
             await outbox.AddAsync(NewOutbox(submitted), ct);
             await leaveRepository.SaveAsync(ct);
 
@@ -95,9 +97,10 @@ public class LeaveService(
 
         var owner = await userRepository.GetByIdWithManagerAsync(lr.UserId, ct);
 
+        lr.Revision++;
         var submitted = new LeaveRequestSubmitted(lr.Id, lr.UserId, owner?.Name ?? $"User {lr.UserId}",
             lr.Type, lr.StartDate, lr.EndDate, lr.CreatedAt,
-            owner?.Email ?? "", owner?.Manager?.Email ?? "");
+            owner?.Email ?? "", owner?.Manager?.Email ?? "", lr.Revision);
 
         lr.Status = LeaveStatus.Submitted;
         await outbox.AddAsync(NewOutbox(submitted), ct);
@@ -123,11 +126,12 @@ public class LeaveService(
 
         LeaveState.For(lr.Status).EnsureCanTransitionTo(LeaveStatus.Cancelled);
 
-        // Отмена — тоже изменение статуса: reporting уберёт строку read-модели,
+        // Отмена — тоже изменение статуса: reporting скроет строку календаря, сохранив версию,
         // audit запишет историю (через outbox, та же транзакция).
         var owner = await userRepository.GetByIdAsync(lr.UserId, ct);
+        lr.Revision++;
         var cancelled = new LeaveRequestStatusChanged(lr.Id, lr.UserId, LeaveStatus.Cancelled,
-            lr.StartDate, lr.EndDate, owner?.Email ?? "");
+            lr.StartDate, lr.EndDate, owner?.Email ?? "", lr.Revision, owner?.Name ?? "", lr.Type);
 
         lr.Status = LeaveStatus.Cancelled;
         await outbox.AddAsync(NewOutbox(cancelled), ct);
@@ -174,7 +178,9 @@ public class LeaveService(
         // State: запрещаем нелегальные переходы (например, утвердить уже отклонённую/не поданную).
         LeaveState.For(lr.Status).EnsureCanTransitionTo(newStatus);
 
-        var changed = new LeaveRequestStatusChanged(lr.Id, lr.UserId, newStatus, lr.StartDate, lr.EndDate, owner.Email);
+        lr.Revision++;
+        var changed = new LeaveRequestStatusChanged(lr.Id, lr.UserId, newStatus, lr.StartDate, lr.EndDate,
+            owner.Email, lr.Revision, owner.Name, lr.Type);
 
         lr.Status = newStatus;
         await outbox.AddAsync(NewOutbox(changed), ct);

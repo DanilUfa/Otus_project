@@ -44,6 +44,10 @@ public class LeaveRequestBuilder
 
     public LeaveRequest Build()
     {
+        if (!Enum.IsDefined(_type))
+            throw new DomainValidationException("Неизвестный тип отсутствия.");
+        if (_reason.Length > 500)
+            throw new DomainValidationException("Причина не должна превышать 500 символов.");
         if (_start == default || _end == default)
             throw new DomainValidationException("Даты отпуска не заданы.");
         if (_end.Date < _start.Date)

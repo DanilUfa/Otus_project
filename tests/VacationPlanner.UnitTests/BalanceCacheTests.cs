@@ -12,6 +12,21 @@ namespace VacationPlanner.UnitTests;
 
 public class BalanceCacheTests
 {
+    [Fact]
+    public async Task Redis_failure_after_commit_does_not_fail_mutation_or_expose_old_value_in_next_scope()
+    {
+        var h = new Harness();
+        Assert.Equal(28, await h.Balance.GetRemainingAnnualDaysAsync(2, Year));
+        h.Cache.Unavailable = true;
+        var created = await h.Leaves.SubmitAsync(Annual(Date(Year, 7, 1), Date(Year, 7, 2)));
+        Assert.True(created.Id > 0);
+        var nextScope = new BalanceService(h.Repo, h.Gate, h.Cache, h.CacheState);
+        Assert.Equal(26, await nextScope.GetRemainingAnnualDaysAsync(2, Year));
+        h.Cache.Unavailable = false;
+        Assert.Equal(26, await nextScope.GetRemainingAnnualDaysAsync(2, Year));
+        Assert.Equal(26, await nextScope.GetRemainingAnnualDaysAsync(2, Year));
+    }
+
     private static readonly int Year = DateTime.UtcNow.Year + 2;
     private static DateTime Date(int year, int month, int day) => new(year, month, day, 0, 0, 0, DateTimeKind.Utc);
     private static CreateLeaveRequestRequest Annual(DateTime start, DateTime end)
@@ -91,17 +106,19 @@ public class BalanceCacheTests
     {
         public FakeLeaveRepository Repo { get; } = new();
         public TestCache Cache { get; } = new();
+        public BalanceGate Gate { get; } = new();
+        public BalanceCacheState CacheState { get; } = new();
         public BalanceService Balance { get; }
         public LeaveService Leaves { get; }
 
         public Harness()
         {
-            var gate = new BalanceGate();
+            var gate = Gate;
             var users = new FakeUserRepository();
             var manager = new User { Id = 1, Name = "Manager", Email = "manager@test.local" };
             users.Users.Add(manager);
             users.Users.Add(new User { Id = 2, Name = "Employee", Email = "employee@test.local", ManagerId = 1, Manager = manager });
-            Balance = new BalanceService(Repo, gate, Cache);
+            Balance = new BalanceService(Repo, gate, Cache, CacheState);
             Leaves = new LeaveService(Repo, users, new FakeOutboxRepository(), new FakeUnitOfWork(),
                 new VacationMetrics(), new NoRealtime(), Balance, gate);
         }
@@ -117,10 +134,12 @@ public class BalanceCacheTests
     {
         private readonly ConcurrentDictionary<string, byte[]> values = new();
         public Func<Task>? BeforeSet { get; set; }
+        public bool Unavailable { get; set; }
         public TimeSpan? LastTtl { get; private set; }
         public byte[]? Get(string key) => values.GetValueOrDefault(key);
         public Task<byte[]?> GetAsync(string key, CancellationToken token = default)
         {
+            if (Unavailable) throw new IOException("Redis unavailable");
             token.ThrowIfCancellationRequested();
             return Task.FromResult(Get(key));
         }
@@ -131,6 +150,7 @@ public class BalanceCacheTests
         }
         public async Task SetAsync(string key, byte[] value, DistributedCacheEntryOptions options, CancellationToken token = default)
         {
+            if (Unavailable) throw new IOException("Redis unavailable");
             if (BeforeSet is { } block) await block();
             token.ThrowIfCancellationRequested();
             Set(key, value, options);
@@ -138,6 +158,7 @@ public class BalanceCacheTests
         public void Remove(string key) => values.TryRemove(key, out _);
         public Task RemoveAsync(string key, CancellationToken token = default)
         {
+            if (Unavailable) throw new IOException("Redis unavailable");
             token.ThrowIfCancellationRequested();
             Remove(key);
             return Task.CompletedTask;

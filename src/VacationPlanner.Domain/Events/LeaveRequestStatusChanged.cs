@@ -10,4 +10,7 @@ public record LeaveRequestStatusChanged(
     LeaveStatus Status,
     DateTime StartDate,
     DateTime EndDate,
-    string EmployeeEmail);
+    string EmployeeEmail,
+    long Revision = 0,
+    string UserName = "",
+    LeaveType? Type = null);

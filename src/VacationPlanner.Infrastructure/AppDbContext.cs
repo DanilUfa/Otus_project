@@ -51,6 +51,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             e.HasIndex(lr => new { lr.UserId, lr.StartDate });
             e.Property(lr => lr.Reason).HasMaxLength(500);
+            e.Property(lr => lr.Revision).HasDefaultValue(0L).IsConcurrencyToken();
         });
 
         modelBuilder.Entity<LeaveAttachment>(e =>

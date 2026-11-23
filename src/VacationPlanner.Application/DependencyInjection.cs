@@ -16,6 +16,7 @@ public static class DependencyInjection
         services.AddScoped<RefreshTokenCleanupService>();
         services.AddScoped<StaleDraftService>();
         services.AddSingleton<BalanceGate>();
+        services.AddSingleton<BalanceCacheState>();
         services.AddSingleton<VacationMetrics>();
         return services;
     }

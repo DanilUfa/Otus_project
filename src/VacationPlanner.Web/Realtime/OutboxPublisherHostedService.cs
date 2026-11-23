@@ -51,6 +51,7 @@ public class OutboxPublisherHostedService(
         var pending = await outbox.GetPendingAsync(batchSize, ct);
         if (pending.Count == 0) return;
 
+        var published = 0;
         foreach (var m in pending)
         {
             try
@@ -65,23 +66,20 @@ public class OutboxPublisherHostedService(
                 };
                 await publishEndpoint.Publish(evt, ct);
                 m.PublishedAt = DateTime.UtcNow;
+                m.Failed = false;
+                m.NextAttemptAt = null;
+                published++;
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
-                m.FailedCount++;
-                if (m.FailedCount >= 5)
-                {
-                    m.Failed = true;
-                    log.LogError(ex, "OUTBOX {Id} {Type}: {N} неудачных попыток, сообщение помечено Failed", m.Id, m.Type, m.FailedCount);
-                }
-                else
-                {
-                    log.LogWarning(ex, "OUTBOX {Id} {Type}: публикация не удалась (попытка {N} из 5)", m.Id, m.Type, m.FailedCount);
-                }
+                m.ScheduleRetry(DateTime.UtcNow);
+                log.LogWarning(ex, "OUTBOX {Id} {Type}: ошибка #{N}, следующая попытка {Next}",
+                    m.Id, m.Type, m.FailedCount, m.NextAttemptAt);
             }
         }
 
         await db.SaveChangesAsync(ct);
-        log.LogInformation("OUTBOX опубликовано {Count} событий", pending.Count);
+        log.LogInformation("OUTBOX опубликовано {Count} из {Total} событий", published, pending.Count);
     }
 }

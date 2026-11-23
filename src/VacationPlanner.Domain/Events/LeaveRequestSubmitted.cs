@@ -13,4 +13,5 @@ public record LeaveRequestSubmitted(
     DateTime EndDate,
     DateTime CreatedAt,
     string EmployeeEmail,
-    string ManagerEmail);
+    string ManagerEmail,
+    long Revision = 0);

@@ -7,6 +7,7 @@ public interface IRefreshTokenRepository
     Task<RefreshToken?> GetByHashAsync(string tokenHash, CancellationToken ct = default);
     Task AddAsync(RefreshToken token, CancellationToken ct = default);
     Task SaveAsync(CancellationToken ct = default);
+    Task<bool> TryRotateAsync(RefreshToken old, RefreshToken replacement, CancellationToken ct = default);
 
     /// <summary>
     /// Удаляет непригодные токены: истёкшие (ExpiresAt &lt; now) и отозванные ранее

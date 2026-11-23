@@ -22,6 +22,7 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<EmailVerificationConsumer>();
     x.UsingRabbitMq((ctx, cfg) =>
     {
+        cfg.UseMessageRetry(r => r.Intervals(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
         cfg.Host(rabbit["Host"] ?? "localhost", "/", h =>
         {
             h.Username(rabbit["Username"] ?? "vac");

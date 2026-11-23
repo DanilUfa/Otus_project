@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Logging;
 using VacationPlanner.Application.Contracts;
 using VacationPlanner.Domain;
 using VacationPlanner.Domain.Entities;
@@ -10,8 +11,10 @@ namespace VacationPlanner.Application.Services;
 /// Расчёт остатка дней годового отпуска.
 /// Логика выделена в отдельный сервис — её легко расширить стратегиями по типам отпуска.
 /// </summary>
-public class BalanceService(ILeaveRepository leaveRepository, BalanceGate gate, IDistributedCache? cache = null)
+public class BalanceService(ILeaveRepository leaveRepository, BalanceGate gate, IDistributedCache? cache = null,
+    BalanceCacheState? cacheState = null, ILogger<BalanceService>? logger = null)
 {
+    private readonly BalanceCacheState state = cacheState ?? new();
     public const int DefaultAnnualDays = 28;
 
     public async Task<int> GetRemainingAnnualDaysAsync(int userId, int year, CancellationToken ct = default)
@@ -21,8 +24,25 @@ public class BalanceService(ILeaveRepository leaveRepository, BalanceGate gate, 
         using var _ = await gate.LockAsync(userId, ct);
 
         var key = CacheKey(userId, year);
-        if (cache is not null && await cache.GetAsync(key, ct) is { } bytes)
-            return JsonSerializer.Deserialize<int>(bytes);
+        if (cache is not null)
+        {
+            try
+            {
+                if (state.IsDirty(key))
+                {
+                    await cache.RemoveAsync(key, ct);
+                    state.Clear(key);
+                }
+                if (await cache.GetAsync(key, ct) is { } bytes)
+                    return JsonSerializer.Deserialize<int>(bytes);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                state.MarkDirty(key);
+                logger?.LogWarning(ex, "Balance cache read failed for {Key}; using database", key);
+            }
+        }
 
         var from = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var to = new DateTime(year, 12, 31, 0, 0, 0, DateTimeKind.Utc);
@@ -39,8 +59,20 @@ public class BalanceService(ILeaveRepository leaveRepository, BalanceGate gate, 
 
         var remaining = Math.Max(0, DefaultAnnualDays - used);
         if (cache is not null)
-            await cache.SetAsync(key, JsonSerializer.SerializeToUtf8Bytes(remaining),
-                new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60) }, ct);
+        {
+            try
+            {
+                await cache.SetAsync(key, JsonSerializer.SerializeToUtf8Bytes(remaining),
+                    new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60) }, ct);
+                state.Clear(key);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                state.MarkDirty(key);
+                logger?.LogWarning(ex, "Balance cache write failed for {Key}", key);
+            }
+        }
         return remaining;
     }
 
@@ -50,7 +82,19 @@ public class BalanceService(ILeaveRepository leaveRepository, BalanceGate gate, 
     {
         if (cache is null || leave.Type != LeaveType.Annual) return;
         for (var year = leave.StartDate.Year; year <= leave.EndDate.Year; year++)
-            await cache.RemoveAsync(CacheKey(leave.UserId, year), CancellationToken.None);
+        {
+            var key = CacheKey(leave.UserId, year);
+            state.MarkDirty(key);
+            try
+            {
+                await cache.RemoveAsync(key, CancellationToken.None);
+                state.Clear(key);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Balance cache invalidation failed for {Key}; removal will be retried on read", key);
+            }
+        }
     }
 
     private static string CacheKey(int userId, int year) => $"balance:v2:{userId}:{year}";

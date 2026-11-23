@@ -17,6 +17,7 @@ public class StaleDraftService(ILeaveRepository repo)
         {
             LeaveState.For(lr.Status).EnsureCanTransitionTo(LeaveStatus.Cancelled); // Draft → Cancelled
             lr.Status = LeaveStatus.Cancelled;
+            lr.Revision++;
         }
         if (stale.Count > 0)
             await repo.SaveAsync(ct);

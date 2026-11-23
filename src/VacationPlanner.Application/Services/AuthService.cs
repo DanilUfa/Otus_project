@@ -91,11 +91,8 @@ public class AuthService(
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(RefreshDays)
         };
-        old.RevokedAt = DateTime.UtcNow;
-        old.ReplacedByTokenHash = replacement.TokenHash;
-
-        await refreshTokens.AddAsync(replacement, ct);
-        await refreshTokens.SaveAsync(ct);
+        if (!await refreshTokens.TryRotateAsync(old, replacement, ct))
+            throw new UnauthorizedAccessException("Refresh-токен уже использован или отозван.");
         return new LoginResponse(tokenService.CreateAccessToken(user), raw, user.Id, user.Name, user.Role.ToString());
     }
 }

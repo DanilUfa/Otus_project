@@ -29,6 +29,19 @@ public sealed class FakeRefreshTokenRepository : IRefreshTokenRepository
         return Task.CompletedTask;
     }
 
+    public Task<bool> TryRotateAsync(RefreshToken old, RefreshToken replacement, CancellationToken ct = default)
+    {
+        lock (Items)
+        {
+            if (old.RevokedAt is not null || old.ExpiresAt <= DateTime.UtcNow) return Task.FromResult(false);
+            old.RevokedAt = DateTime.UtcNow;
+            old.ReplacedByTokenHash = replacement.TokenHash;
+            Items.Add(replacement);
+            SaveCalls++;
+            return Task.FromResult(true);
+        }
+    }
+
     public Task<int> DeleteExpiredAndRevokedAsync(DateTime revokedBefore, CancellationToken ct = default)
     {
         LastRevokedBefore = revokedBefore;

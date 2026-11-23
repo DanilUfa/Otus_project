@@ -69,13 +69,12 @@ async function rotateRefresh() {
 
 async function request(path, { method = 'GET', body, formData } = {}) {
   // formData: multipart (загрузка файлов) — браузер сам ставит Content-Type с boundary.
-  const headers = token() ? { Authorization: `Bearer ${token()}` } : {};
-  if (!formData) headers['Content-Type'] = 'application/json';
-  const attempt = () => fetch(path, {
-    method,
-    headers,
-    body: formData || (body ? JSON.stringify(body) : undefined)
-  });
+  const attempt = () => {
+    // A retry must read the token again after rotateRefresh replaces it.
+    const headers = token() ? { Authorization: `Bearer ${token()}` } : {};
+    if (!formData) headers['Content-Type'] = 'application/json';
+    return fetch(path, { method, headers, body: formData || (body ? JSON.stringify(body) : undefined) });
+  };
 
   let res = await attempt();
   // Access-токен истёк (TTL 15 мин): одна ротация refresh-токена и повтор исходного запроса.

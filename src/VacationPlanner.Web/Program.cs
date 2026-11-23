@@ -168,6 +168,11 @@ app.Use(async (ctx, next) =>
         ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
         await ctx.Response.WriteAsJsonAsync(new { error = "Доступ запрещён: недостаточно прав." });
     }
+    catch (DbUpdateConcurrencyException)
+    {
+        ctx.Response.StatusCode = StatusCodes.Status409Conflict;
+        await ctx.Response.WriteAsJsonAsync(new { error = "Заявка уже изменена. Обновите данные и повторите действие." });
+    }
     catch (InvalidOperationException ex) // нелегальный State-переход
     {
         ctx.Response.StatusCode = StatusCodes.Status409Conflict;

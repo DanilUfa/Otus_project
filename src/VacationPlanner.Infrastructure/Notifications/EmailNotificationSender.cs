@@ -64,6 +64,7 @@ public class EmailNotificationSender(IConfiguration configuration, ILogger<Email
         catch (Exception ex)
         {
             logger.LogError(ex, "Не удалось отправить уведомление на {To} ({Subject}).", toEmail, subject);
+            throw; // let MassTransit retry/redeliver; never acknowledge an unsent notification
         }
     }
 }

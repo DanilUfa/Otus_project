@@ -53,7 +53,7 @@ internal sealed class JobStore(IDbContextFactory<ImporterDbContext> contexts)
         return new("Duplicate", $"RequestId already reserved by job {original.ImportJobId}, line {original.RowNumber}.");
     }
 
-    // Only one caller at a time may mutate a given job (including heartbeat and finalization).
+    // Workers serialize row results. The heartbeat updates only HeartbeatAt on its own connection.
     public async Task RecordAsync(int jobId, int line, Guid? reserved, ApiResult result, CancellationToken ct)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);

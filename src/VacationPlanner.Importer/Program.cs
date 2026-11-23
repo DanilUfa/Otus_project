@@ -92,14 +92,34 @@ try
 catch (OperationCanceledException) when (ct.IsCancellationRequested) { return 130; }
 catch (InvalidDataException ex) { Console.Error.WriteLine(ex.Message); return 2; }
 catch (DecoderFallbackException) { Console.Error.WriteLine("CSV is not valid UTF-8."); return 2; }
-catch (Exception ex) when (ex is ArgumentException or FileNotFoundException or DirectoryNotFoundException or UnauthorizedAccessException)
+catch (FileNotFoundException ex) when (args is ["import", "--file", _] && ex.FileName == Path.GetFullPath(args[2]))
 {
-    Console.Error.WriteLine($"Invalid input or configuration ({ex.GetType().Name}). Check the CSV, JWT and settings.");
+    Console.Error.WriteLine($"CSV file not found: {args[2]}");
     return 2;
+}
+catch (DirectoryNotFoundException) when (args is ["import", "--file", _])
+{
+    Console.Error.WriteLine($"Directory not found for CSV: {args[2]}");
+    return 2;
+}
+catch (UnauthorizedAccessException)
+{
+    Console.Error.WriteLine("Access denied while reading or writing a file.");
+    return 2;
+}
+catch (ArgumentException)
+{
+    Console.Error.WriteLine("Invalid importer configuration or argument.");
+    return 2;
+}
+catch (Npgsql.PostgresException ex) when (ex.SqlState == Npgsql.PostgresErrorCodes.UndefinedTable)
+{
+    Console.Error.WriteLine("Importer table not found. Run the migrate command.");
+    return 4;
 }
 catch (Exception ex)
 {
-    Console.Error.WriteLine($"Importer unavailable ({ex.GetType().Name}). Check database connectivity, migrations and active imports.");
+    Console.Error.WriteLine($"Command '{args[0]}' failed ({ex.GetType().Name}).");
     return 4;
 }
 

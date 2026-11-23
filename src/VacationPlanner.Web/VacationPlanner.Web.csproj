@@ -9,15 +9,18 @@
   <ItemGroup>
     <ProjectReference Include="..\VacationPlanner.Application\VacationPlanner.Application.csproj" />
     <ProjectReference Include="..\VacationPlanner.Infrastructure\VacationPlanner.Infrastructure.csproj" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="*" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="*" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.1" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.15" />
     <PackageReference Include="MassTransit.RabbitMQ" Version="8.4.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="*" />
-    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="*" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.15" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.4">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\VacationPlanner.Observability\VacationPlanner.Observability.csproj" />
+  </ItemGroup>
 </Project>

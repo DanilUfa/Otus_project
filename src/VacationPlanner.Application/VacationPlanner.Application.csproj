@@ -8,9 +8,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VacationPlanner.Domain\VacationPlanner.Domain.csproj" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="*" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="*" />
-    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="*" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.15" />
   </ItemGroup>
 
 </Project>

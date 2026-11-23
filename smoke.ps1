@@ -60,7 +60,8 @@ try {
   $bal = Invoke-RestMethod -Uri "$b/api/balance/2?year=2026" -Headers @{Authorization="Bearer $emp"}
   Note "balance 2026 remaining: $($bal.remaining)"
 
-  $metrics = (Invoke-WebRequest "$b/metrics" -UseBasicParsing).Content
+  # Gateway exports its own process/HTTP metrics; business counters belong to API.
+  $metrics = (Invoke-WebRequest "http://localhost:5100/metrics" -UseBasicParsing).Content
   ($metrics -split "`n" | Where-Object { $_ -match '^vacation_leaves' }) | ForEach-Object { Note $_ }
 
   Note "SMOKE DONE OK"

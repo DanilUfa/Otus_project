@@ -1,0 +1,36 @@
+name: vacation-importer-demo
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: vacation_importer
+      POSTGRES_USER: importer
+      POSTGRES_PASSWORD: ${IMPORTER_DEMO_DB_PASSWORD:?Start demo-importer.bat}
+    volumes: [demo-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U importer -d vacation_importer]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  importer:
+    image: vacation-importer:latest
+    environment:
+      ConnectionStrings__Importer: Host=db;Database=vacation_importer;Username=importer;GSS Encryption Mode=Disable
+      PGPASSWORD: ${IMPORTER_DEMO_DB_PASSWORD:?Start demo-importer.bat}
+      Importer__BaseUrl: http://api/
+      Importer__Token: ${IMPORTER_DEMO_TOKEN:-}
+    volumes:
+      - ${IMPORTER_DEMO_INPUT_DIR:?Start demo-importer.bat}:/input:ro
+    networks: [default, application]
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  demo-data:
+
+networks:
+  application:
+    external: true
+    name: vacation_vacnet

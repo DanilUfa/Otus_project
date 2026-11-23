@@ -1,248 +1,253 @@
-# Планирование отпусков — черновой вариант (MVP)
+# Vacation Planner — планирование отпусков и импорт заявок
 
-C# / .NET 10 · ASP.NET Core Minimal API · PostgreSQL · EF Core · MassTransit (RabbitMQ) · Redis (кэш) · Swagger (Swashbuckle).
+Учебный командный проект курса **OTUS «C# Developer. Professional»**: веб-приложение для сотрудников и руководителей и отдельный CLI-импортёр заявок из CSV.
 
-## Шаблоны проектирования (что реализовано в коде)
+**Данил** — основное приложение, обработка заявок и взаимодействие сервисов. **Дильшат** — `VacationPlanner.Importer`: CSV, задачи импорта, обработка ошибок, параллелизм и восстановление.
 
-> Ниже — только те паттерны, что **есть в коде**, с указанием классов.
+**Стек:** C# / .NET 10, ASP.NET Core, React + Vite, PostgreSQL, EF Core, RabbitMQ + MassTransit, Redis, SignalR, Docker Compose, Prometheus, Grafana, xUnit.
 
-| # | Паттерн | Группа | Где в коде | Что даёт |
-|---|---------|--------|-----------|----------|
-| 1 | **Factory Method** | создание | `Application/Patterns/LeaveRequestFactory.cs` | единая точка создания `LeaveRequest` (тип/даты/статус), скрывает инициализацию |
-| 2 | **Builder** | создание | `Application/Patterns/LeaveRequestBuilder.cs` | пошаговое построение заявки (`ForUser().OfType().Between().Reason().Build()`), читаемо и валидируется |
-| 3 | **Observer** | поведение | доменные события `Events/*` + `Consumers/*` в notifier/audit/reporting | подписчики узнают о событиях без прямой связи с источником |
-| 4 | **Mediator** | поведение | **MassTransit/RabbitMQ** (`LeaveRequestSubmitted`, `LeaveRequestStatusChanged`) | вынесение взаимодействия за шину: api публикует, notifier/audit/reporting слушают |
-| 5 | **Adapter** | структура | `EmailNotificationSender` (MailKit ↔ `INotificationSender`); `LeaveRepository/UserRepository` (EF Core ↔ `ILeaveRepository/IUserRepository`) | сведение сторонней библиотеки/ORM к нашим интерфейсам |
-| 6 | **Singleton** | создание | `BalanceGate`, `VacationMetrics` — регистрации `AddSingleton` в DI | одно общее состояние (per-user async-замок; счётчики метрик) |
-| 7 | **State** | поведение | `Application/Patterns/LeaveState.cs` + use в `LeaveService` | жизненный цикл заявки: объекты-состояния запрещают нелегальные переходы (например, нельзя утвердить уже отклонённую) |
+## Что умеет приложение
 
-### Как устроены **Observer + Mediator** (по коду)
-- **Издатель** (API в `LeaveService`) после сохранения заявки вызывает `IPublishEndpoint.Publish(...)`.
-- **Подписчики** (notifier/audit/reporting: `*Consumer`) сами не знают про издателя — регистрируются в `AddMassTransit` в каждом сервисе.
-- Транспорт (RabbitMQ) — это и есть медиатор: продюсер и консьюмер связаны только контрактом сообщения, а не кодом.
-- Проверка «вживую»: подаём заявку → событие ловится консьюмерами, хотя api «не знает» о них (в логи смотри: `notifier.log` — письмо, `audit.log` — строка AUDIT, `reporting.log` — строка READMODEL).
+- Вход с JWT и ролями, refresh-токены и регистрация с подтверждением почты.
+- Создание заявки, сохранение черновика, отправка на согласование и отмена.
+- Утверждение и отклонение заявки непосредственным руководителем сотрудника.
+- Годовой отпуск, больничный и отпуск без сохранения заработной платы.
+- Проверка пересечений и годового лимита. Заявки `Submitted` и `Approved` резервируют дни годового отпуска; на границе лет учитывается часть периода каждого года.
+- Календарь отдела с пересечениями, документы-вложения и справочник праздничных дней.
+- Уведомления по email, история операций и обновления интерфейса через SignalR.
+- Массовая загрузка заявок из CSV с журналом задач, ошибками строк и защитой от повторных UUID.
+- Метрики бизнес-операций и состояния шести постоянно работающих .NET-сервисов.
 
-### Дополнительно (усиливает аргумент, но не считается основным)
-- `SemaphoreSlim` (`BalanceGate.LockAsync`) — **примитив синхронизации** (асинхронный замок на пользователя, защищает пересчёт баланса от гонок).
-- **Repository + DI** — изоляция доступа к данным за интерфейсами (`ILeaveRepository`, `IUserRepository`).
+## Быстрый запуск
 
-> Примечание: `Decorator`/`Memento`, Keycloak, Kafka — в **роадмапе**, в этом MVP не реализованы.
+Нужны Git и Docker Desktop с запущенным Linux Engine. Для сборки целиком в Docker установка .NET и Node.js на хост не требуется.
 
-## Быстрый запуск одной командой (Docker)
-
-```bash
-docker compose up -d --build
+```powershell
+git clone https://github.com/DanilUfa/Otus_project.git
+cd Otus_project
+docker compose up -d --build --wait
 ```
 
-| Что | Где |
-|-----|-----|
-| Swagger API | http://localhost:5000/swagger |
-| SPA (/ или index) | http://localhost:5000/ |
-| RabbitMQ UI | http://localhost:15672 (vac / vac) |
+Откройте **[приложение](http://localhost:5000)**. Миграции и демонстрационные пользователи создаются автоматически.
 
-После первого подъёма создаются тестовые пользователи (менеджер и сотрудник).
-Схема БД управляется миграциями EF Core (`db.Database.Migrate()` на старте).
+| Роль | Почта | Пароль |
+|---|---|---|
+| Руководитель | `manager@vac.local` | `Manager123!` |
+| Сотрудник | `petr@vac.local` | `User123!` |
+| Сотрудник | `maria@vac.local` | `User123!` |
+| Сотрудник | `alex@vac.local` | `User123!` |
 
-## Frontend (React SPA)
+Настройки и учётные данные Compose предназначены для локальной демонстрации. При развёртывании вне неё замените пароли и JWT-ключ и настройте HTTPS.
 
-```text
-src/VacationPlanner.Web/ClientApp/    # Vite + React
+| Компонент | Адрес | Вход |
+|---|---|---|
+| Приложение / Gateway | http://localhost:5000 | Учётные записи выше |
+| Swagger основного API | http://localhost:5000/swagger | — |
+| Основной API напрямую | http://localhost:5100 | JWT |
+| Reporting / Swagger | http://localhost:5200/swagger | JWT для защищённых методов |
+| Audit / Swagger | http://localhost:5300/swagger | JWT для защищённых методов |
+| Письма Mailpit | http://localhost:8025 | — |
+| RabbitMQ Management | http://localhost:15672 | `vac` / `vac` |
+| Prometheus Targets | http://localhost:9090/targets | — |
+| Grafana | http://localhost:3000 | `admin` / `admin` |
+
+Остановить контейнеры, сохранив тома БД: `docker compose down`. Повторно запустить собранные образы: `docker compose up -d --no-build --wait`.
+
+## Архитектура и путь заявки
+
+```mermaid
+flowchart LR
+    UI[React SPA] --> GW[API Gateway]
+    GW --> API[Web API]
+    GW --> REPORT[Reporting]
+    GW --> AUDIT[Audit]
+    IMPORT[CSV Importer CLI] -->|HTTP API| API
+    IMPORT --> IDB[(БД импортёра)]
+    API --> DB[(PostgreSQL: заявки и Outbox)]
+    API --> REDIS[(Redis)]
+    DB --> OUT[Outbox Publisher]
+    OUT --> MQ[RabbitMQ]
+    MQ --> REPORT
+    MQ --> AUDIT
+    MQ --> NOTIFY[Notifier]
+    NOTIFY --> MAIL[SMTP / Mailpit]
+    REPORT --> RDB[(БД календаря)]
+    AUDIT --> ADB[(БД аудита)]
+    API -->|SignalR| UI
 ```
-Функции: вход, подача заявки, список, согласование (менеджер), остаток дней, годовой календарь-график.
 
-**Режим разработки** (Vite dev-server на :5173, проксирует `/api` на :5000):
-```bash
-npm --prefix src/VacationPlanner.Web/ClientApp install
+1. Интерфейс передаёт заявку через Gateway. API определяет сотрудника по JWT, проверяет даты, пересечения и лимит.
+2. `LeaveService` сохраняет заявку и событие в Outbox **в одной транзакции** PostgreSQL.
+3. Фоновый издатель отправляет событие в RabbitMQ. Неудачная отправка повторяется.
+4. Notifier отправляет письмо, Audit сохраняет историю, Reporting обновляет модель календаря. Сервисы аудита и календаря используют собственные логические базы PostgreSQL.
+5. При изменении статуса выполняется аналогичный обмен событиями; SignalR сообщает интерфейсу об изменениях.
+
+Календарь, аудит и письма обновляются асинхронно, поэтому после ответа API возможна небольшая задержка. Scheduler выполняет периодические задачи очистки черновиков и refresh-токенов.
+
+## CSV-импортёр
+
+`VacationPlanner.Importer` — отдельная консольная команда. Она создаёт заявки через API, сохраняя бизнес-проверки основного приложения. Пользователь CSV должен совпадать с владельцем JWT.
+
+```csv
+RequestId,UserId,Type,StartDate,EndDate,Reason
+6d77cbeb-0acb-4982-8ec0-b4200b3b9a01,2,Sick,2030-05-06,2030-05-07,Medical leave
+6d77cbeb-0acb-4982-8ec0-b4200b3b9a02,2,Unpaid,2030-06-10,2030-06-11,"Demo, day off"
+```
+
+`RequestId` — UUID строки импорта, а не ID созданной заявки. Для нового импорта используйте новые UUID и свободные даты. Поля и ограничения описаны в [формате CSV](docs/importer/CSV_FORMAT.md).
+
+Возможности импортёра:
+
+- Preflight структуры и ограничений файла до создания задачи.
+- Собственная БД PostgreSQL: задачи, ошибки с номерами строк и журнал отправок.
+- Асинхронный итератор CSV, ограниченный `Channel` и пул обработчиков: по умолчанию 4 workers и очередь на 16 записей.
+- Упорядочивание зависимых строк, `SemaphoreSlim` для фиксации результатов и PostgreSQL advisory lock для одного активного импорта на БД.
+- Частичный успех: ошибки строк не отменяют уже подтверждённые результаты.
+- Обнаружение повторного `RequestId`, heartbeat, отмена и восстановление зависших задач.
+
+Команды: `migrate`, `import --file <csv>`, `list`, `status --job <id>`, `errors --job <id>`, `dispatches --job <id>`, `recover`.
+
+### Подготовленная демонстрация на Windows
+
+Сначала поднимите основной стек и соберите образ импортёра:
+
+```powershell
+docker compose up -d --build --wait
+docker compose --profile importer build importer
+.\demo-importer.bat
+```
+
+Сценарий открывает приложение и делает паузы перед каждым этапом:
+
+| Шаг | Ожидаемый результат |
+|---|---|
+| Две корректные строки | `Imported=2 Errors=0` |
+| Смешанный CSV: корректная строка, неверная дата, пересечение | `Imported=1 Errors=2` |
+| Повтор первого файла с прежними UUID | `Imported=0 Errors=2`, ошибки `Duplicate` |
+| Неверный заголовок CSV | Отказ preflight без новой задачи |
+| Сверка с API | Ровно три созданные заявки |
+
+Каждый полный показ добавляет три заявки Петра с меткой `import-demo-...`. Сценарий выбирает свободные даты и новые UUID. У демонстрационного импортёра отдельная БД; он обращается напрямую к API в сети `vacation_vacnet`.
+
+- `.\demo-importer.bat --check` — проверка готовности без импорта.
+- `.\demo-importer.bat --auto` — полный прогон без пауз и открытия браузера.
+- [Памятка для демонстрации](demo-importer-help.txt) — что показывать и говорить.
+- CSV, журнал и `result.json`: `.local-demo/importer/runs/<метка>`; каталог исключён из Git и Docker context.
+- Пароль демонстрационной БД сохраняется через Windows DPAPI. Файл `.local-demo/importer/db-password.xml` нужен для повторного запуска с тем же томом БД.
+
+Для обычной работы с профилем `importer`, переменными окружения и CLI см. [инструкцию модуля](src/VacationPlanner.Importer/README.md).
+
+## Что применено из курса
+
+| Тема | Реализация |
+|---|---|
+| Базы данных и EF Core | Миграции, репозитории, отдельные хранилища заявок, аудита, календаря и импорта |
+| Асинхронность | HTTP, EF Core, чтение CSV, ожидание блокировок, обработка сообщений |
+| Синхронизация | `BalanceGate` с блокировкой на сотрудника; Channel, SemaphoreSlim и advisory lock в импортёре |
+| Builder | [LeaveRequestBuilder](src/VacationPlanner.Application/Patterns/LeaveRequestBuilder.cs): пошаговое создание заявки |
+| State | [LeaveState](src/VacationPlanner.Application/Patterns/LeaveState.cs): допустимые переходы статусов |
+| Adapter | [EmailNotificationSender](src/VacationPlanner.Infrastructure/Notifications/EmailNotificationSender.cs) и [LeaveApi](src/VacationPlanner.Importer/Http/LeaveApi.cs): интеграция внешних интерфейсов |
+| Facade | [ImportRunner](src/VacationPlanner.Importer/ImportRunner.cs): запуск всего процесса импорта через один метод |
+| Iterator | [CsvSnapshot](src/VacationPlanner.Importer/Csv/CsvSnapshot.cs): выдача записей через `yield return` / `await foreach` |
+| Интеграция приложений | RabbitMQ/MassTransit, publish/subscribe, Transactional Outbox, отдельная read-модель календаря |
+| Тестирование и мониторинг | xUnit, интеграционные тесты PostgreSQL, Prometheus и Grafana |
+
+## Сборка и тестирование
+
+Для сборки на хосте нужны **.NET 10 SDK** и **Node.js с npm**. `global.json` выбирает стабильный SDK ветки .NET 10.
+
+```powershell
+.\build.ps1        # React + решение, Release
+.\build.ps1 -Test  # тесты решения и консольные smoke-проверки
+```
+
+Скрипт также ищет SDK в `%LOCALAPPDATA%\Microsoft\dotnet`, если он установлен без прав администратора. SPA собирается в `src/VacationPlanner.Web/wwwroot`, DLL — в `bin/Release/net10.0` проектов.
+
+При последней полной проверке прошли **93 теста**: 60 основной части и 33 импортёра. Из тестов импортёра 6 требуют PostgreSQL и без настройки подключения помечаются как пропущенные.
+
+```powershell
+# Обычный запуск тестов
+dotnet test VacationPlanner.sln -c Release
+
+# Полный запуск с интеграционными тестами импортёра
+$env:IMPORTER_TEST_POSTGRES = 'Host=127.0.0.1;Port=55432;Database=postgres;Username=importer'
+# Пароль БД можно передать через PGPASSWORD.
+dotnet test VacationPlanner.sln -c Release
+```
+
+Для интеграционных тестов роли PostgreSQL нужны права `CREATEDB`. Тесты создают отдельные БД со случайными именами, применяют миграции и удаляют свои БД после завершения. [Подробности проверки импортёра](src/VacationPlanner.Importer/README.md#проверка-и-демонстрация-otus).
+
+### Режим разработки
+
+```powershell
+.\run-dev.ps1
+# Отдельный Vite dev server при необходимости:
 npm --prefix src/VacationPlanner.Web/ClientApp run dev
 ```
-Открыть http://localhost:5173
 
-Тестовый вход: `manager@vac.local / Manager123!` или `petr@vac.local / User123!`.
+`run-dev.ps1` собирает решение и запускает шесть сервисов на хосте, инфраструктуру — в Docker. Он использует `docker-compose.host.yml` и `prometheus/prometheus.host.yml`. Требуется .NET 10, доступный команде `dotnet`; SPA предварительно собирается через `build.ps1`. Остановка процессов: `.\stop-dev.ps1`.
 
-**Продакшен**: `npm run build` собирает SPA в `wwwroot`, и API отдаёт `/` как SPA.
+## Мониторинг
 
-## Если сборка в Docker падает с «NU1301 ... UntrustedRoot»
+Prometheus опрашивает `/metrics` шести постоянно работающих .NET-сервисов каждые **5 секунд** напрямую по Docker DNS. В [Targets](http://localhost:9090/targets) у всех шести целей должен быть статус `UP`.
 
-Корпоративная SSL-проверка (прокси): внутри linux-контейнера нет вашего корневого CA, поэтому `dotnet restore` из `api.nuget.org` не доверяет TLS.
+Дашборды Grafana подключаются автоматически; вход `admin` / `admin`:
 
-**Решение для Docker-сборки (проверено):** Dockerfile'ы принимают build-arg `NUGET_CA_B64` (base64 PEM-цепочки хостового CA; в чистой сети аргумент пуст и ничего не делает). Извлечь цепочку и собрать:
-```powershell
-node -e "const h=require('https'),f=require('fs');h.get({host:'api.nuget.org',path:'/',rejectUnauthorized:false},r=>{const c=r.socket.getPeerCertificate(true);let a=[],x=c;while(x){a.push('-----BEGIN CERTIFICATE-----\n'+x.raw.toString('base64').match(/.{1,64}/g).join('\n')+'\n-----END CERTIFICATE-----');x=x.issuerCertificate&&x.issuerCertificate.fingerprint!==x.fingerprint?x.issuerCertificate:null}f.writeFileSync('ca.b64',Buffer.from(a.join('\n')).toString('base64'))}).on('error',e=>{console.error(e);process.exit(1)})"
-docker-compose build --build-arg NUGET_CA_B64=(Get-Content ca.b64 -Raw).Trim()
-docker-compose up -d
-```
+- [Заявки](http://localhost:3000/d/vacation-overview): поданные, утверждённые и отклонённые заявки, скорость утверждений.
+- [Сервисы](http://localhost:3000/d/vacation-services): CPU, resident-память, managed heap, HTTP RPS, p95 длительности запросов, HTTP 4xx/5xx, предупреждения и ошибки логов.
 
-**Быстрый путь (приложение на хосте, инфраструктура в Docker):**
-```powershell
-docker compose up -d postgres redis rabbitmq
-dotnet restore
-dotnet build VacationPlanner.sln
-dotnet run --project src/VacationPlanner.Web      # http://localhost:5000/swagger
-'dotnet run' для каждого сервиса (или проще — .\run-dev.ps1, который стартует все 6)
-```
+Бизнес-счётчики: `vacation_leaves_submitted_total`, `vacation_leaves_approved_total`, `vacation_leaves_declined_total`. Они доступны непосредственно у API на http://localhost:5100/metrics. Gateway на `:5000/metrics` экспортирует собственные метрики процесса и HTTP.
 
-## Мониторинг: Prometheus + Grafana
+CPU отображается как процент одного ядра; метрики памяти относятся к процессам .NET. Это не мониторинг ресурсов всего ПК, PostgreSQL, Redis или RabbitMQ. Для Notifier и Scheduler ошибки видны через счётчики логов. CLI-импортёр не входит в шесть постоянно опрашиваемых сервисов; его результаты сохраняются в БД задач.
 
-Бизнес-метрики отдаются API на **`GET /metrics`** (формат Prometheus, `text/plain; version=0.0.4`), реализованы на `System.Diagnostics.Metrics` (Meter + счётчики; `MeterListener` копит кумулятивные значения).
+Счётчики сбрасываются при перезапуске процесса; `rate` и `increase` учитывают сброс. Без наблюдений p95 не определён. Health-запросы входят в HTTP-нагрузку, `/metrics` исключён на дашборде. После ручного изменения конфигурации Prometheus: `docker compose restart prometheus`.
 
-| Метрика | Смысл |
-|---------|-------|
-| `vacation_leaves_submitted_total` | всего подано заявок |
-| `vacation_leaves_approved_total`  | всего утверждено |
-| `vacation_leaves_declined_total`  | всего отклонено |
+## API
 
-**Запуск мониторинга** (API при этом работает на хосте на `:5000`):
-```powershell
-docker compose up -d prometheus grafana
-```
-- Prometheus: http://localhost:9090 (скрейпит `host.docker.internal:5000/metrics`)
-- Grafana:  http://localhost:3000  — **admin/admin**, датасорс Prometheus и дашборд «Планирование отпусков» подключены автоматически (`grafana/`).
+Полная спецификация — в Swagger. Основные маршруты:
 
-Проверка endpoint: `Invoke-RestMethod http://localhost:5000/metrics`
+| Назначение | Маршрут |
+|---|---|
+| Вход / refresh / logout | `POST /api/auth/login`, `/api/auth/refresh`, `/api/auth/logout` |
+| Регистрация и подтверждение | `POST /api/auth/register`, `/api/auth/register/confirm` |
+| Список пользователей и заявок | `GET /api/users`, `GET /api/leave` |
+| Подача / черновик | `POST /api/leave`, `POST /api/leave/draft` |
+| Жизненный цикл | `POST /api/leave/{id}/submit`, `/cancel`, `/approve`, `/decline` |
+| Баланс | `GET /api/balance/{userId}?year=2030` |
+| Вложения | `POST /api/leave/{id}/attachments`, `GET /api/leave/{id}/attachments` |
+| Календарь | `GET /api/reports/calendar?year=2030` |
+| История | `GET /api/audit?requestId={id}` |
+| Состояние | `GET /health/live`, `GET /health/ready` |
 
-## Уведомления по email (Mailpit)
+Бизнес-методы защищены JWT. Сотрудник получает свои заявки; руководитель может просматривать список и согласовывать заявки своих сотрудников. Справочник праздников: `GET /api/holidays?year=2030`. Типы отсутствия в JSON: `0 = Annual`, `1 = Sick`, `2 = Unpaid`.
 
-Для разработки письма шлются в **Mailpit** — локальный SMTP-«ловец» (без реального ящика и паролей приложения). Поднимается вместе с инфрой (`docker compose up -d mailpit`).
+## Структура репозитория
 
-- SMTP: `localhost:1025` (без TLS/авторизации) — так настроено в `src/VacationPlanner.Notifier/appsettings.json` (влияет на письма).
-- Веб-морда: http://localhost:8025 — все отправленные уведомления видны тут.
-
-notifier шлёт руководителю («новая заявка») и сотруднику («утверждена/отклонена»). В логе `logs/notifier.log` появится `Уведомление отправлено на ...`.
-
-Для реального почтовика (Outlook/Office365): задайте `Notifications__Email__Host=smtp.office365.com`, `Port=587`, `StartTls=true`, `Username`/`Password` и `From` (адрес ящика).
-
-*Простые sanity-проверки инкрементов: подать заявку → `vacation_leaves_submitted_total` растёт; утвердить → `_approved_total` растёт.*
-
-**Правильный путь (доверить корпоративный CA контейнеру):**
-1. В браузере откройте `https://api.nuget.org` → сертификат → «Путь сертификации» → верх (корень).
-2. Экспортируйте его в Base64 и сохраните как `certs/corp-root.crt`.
-3. В `Dockerfile` (build-стадия) добавьте:
-   ```dockerfile
-   COPY certs/corp-root.crt /usr/local/share/ca-certificates/corp-root.crt
-   RUN update-ca-certificates
-   ```
-4. `docker compose up -d --build`.
-
-## Эндпоинты
-Все, кроме `/api/auth/login`, требуют токен `Authorization: Bearer <token>`.
-
-### Авторизация (JWT + роли)
-Тестовые пользователи (пароль указан):
-- руководитель: `manager@vac.local` / `Manager123!`
-- сотрудник: `petr@vac.local` / `User123!`
-
-Пример:
-```bash
-# вход → получаем токен
-curl -X POST http://localhost:5000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"manager@vac.local","password":"Manager123!"}'
-
-export TOKEN="eyJ..."
-curl -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/users
-```
-
-### Заявки
-- `GET /api/users` — список сотрудников (auth)
-- `GET /api/leave` — все заявки (auth)
-- `POST /api/leave` — подать заявку: `{ userId, type, startDate, endDate, reason }` (auth)
-  → заявка получает статус `Submitted`, публикуется событие, notifier шлёт уведомление руководителю на email
-- `POST /api/leave/{id}/approve` — утвердить (**роль Manager**, и только руководитель сотрудника)
-- `POST /api/leave/{id}/decline` — отклонить (**роль Manager**)
-- `POST /api/leave/draft` — сохранить черновик (статус `Draft`, без уведомлений)
-- `POST /api/leave/{id}/submit` — отправить черновик на согласование (`Draft → Submitted`, автор)
-- `POST /api/leave/{id}/cancel` — отменить черновик/поданную заявку (`→ Cancelled`, автор)
-- `GET /api/balance/{userId}?year=2026` — остаток дней годового отпуска (auth, кэш Redis TTL 60с)
-- `GET /health/live` — liveness
-- `GET /health/ready` — readiness (БД + RabbitMQ + Redis)
-
-Пример подачи заявки сотрудником:
-```bash
-curl -X POST http://localhost:5000/api/leave \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"userId":2,"type":0,"startDate":"2026-07-01","endDate":"2026-07-14","reason":"Отпуск летом"}'
-```
-`type`: 0 = Annual, 1 = Sick, 2 = Unpaid.
-
-### Поток согласования
-1. Сотрудник подаёт заявку → статус `Submitted`, notifier уведомляет руководителя.
-2. Руководитель подтверждает ролью Manager и вызывает `/approve` или `/decline`
-   (проверка: утверждающим может быть только непосредственный руководитель сотрудника).
-3. Статус меняется на `Approved`/`Declined`; `GET /api/balance` учитывает только утверждённый годовой отпуск.
-
-### Уведомление на Outlook
-При подаче заявки notifier отправляет руководителю email (SMTP/Outlook через MailKit). Для работы пропишите SMTP в `Notifications:Email` (в compose-переменных выше). Если SMTP не задан — уведомление пропускается с логом (приложение не падает).
-
-### Смоук-тест (весь поток)
-```bash
-docker compose up -d --build
-sleep 8
-
-BASE=http://localhost:5000
-
-# 1) Сотрудник входит
-EMP=$(curl -s $BASE/api/auth/login -H "Content-Type: application/json" \
-  -d '{"email":"petr@vac.local","password":"User123!"}' | jq -r .token)
-
-# 2) Сотрудник подаёт заявку (Annual = type 0)
-curl -s -X POST $BASE/api/leave -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $EMP" \
-  -d '{"userId":2,"type":0,"startDate":"2026-07-01","endDate":"2026-07-14","reason":"Отпуск"}'
-
-# 3) Руководитель входит и смотрит заявки
-MGR=$(curl -s $BASE/api/auth/login -H "Content-Type: application/json" \
-  -d '{"email":"manager@vac.local","password":"Manager123!"}' | jq -r .token)
-curl -s $BASE/api/leave -H "Authorization: Bearer $MGR"
-
-# 4) Руководитель утверждает заявку №1
-curl -s -X POST $BASE/api/leave/1/approve -H "Authorization: Bearer $MGR"
-
-# 5) Остаток дней сотрудника (годовой)
-curl -s "$BASE/api/balance/2?year=2026" -H "Authorization: Bearer $EMP"
-```
-В логах: `notifier.log` — отправка письма руководителю; `audit.log` — строка `AUDIT`; `reporting.log` — строка `READMODEL` (read-модель); баланс пересчитывается в api при запросе и кэшируется в Redis.
-
-## Локальная разработка (без Docker для сервисов)
-
-Поднять инфраструктуру, потом запускать из IDE:
-
-```bash
-docker compose up -d postgres redis rabbitmq
-dotnet restore
-dotnet run --project src/VacationPlanner.Web      # http://localhost:5000
-.\run-dev.ps1   # соберёт решение и запустит все 6 микросервисов
-```
-
-## Структура
-
-```
+```text
 src/
-├─ VacationPlanner.Domain/        # сущности, enums, событие
-├─ VacationPlanner.Application/   # DTO, репозитории-инт., Factory+Builder, сервисы
-├─ VacationPlanner.Infrastructure/ # AppDbContext (PostgreSQL), репозитории, DI
-├─ VacationPlanner.Web/           # Minimal API + Swagger + MassTransit (publish)
-├─ VacationPlanner.Notifier/    # письма (консьюмеры событий)
-├─ VacationPlanner.Scheduler/  # фоновая чистка черновиков
-├─ VacationPlanner.Audit/      # аудит-история (AuditLogs, /api/audit)
-├─ VacationPlanner.Reporting/  # CQRS read-модель (/api/reports/calendar)
-└─ VacationPlanner.Gateway/    # API Gateway :5000 (реверс-прокси)
+  VacationPlanner.Domain/          Сущности, статусы, контракты событий
+  VacationPlanner.Application/     Прикладные сервисы, интерфейсы, паттерны
+  VacationPlanner.Infrastructure/  EF Core, репозитории, безопасность, email
+  VacationPlanner.Web/             Основной API, React SPA, SignalR, Outbox
+  VacationPlanner.Gateway/         HTTP Gateway
+  VacationPlanner.Notifier/        Email-подписчики
+  VacationPlanner.Audit/           История операций и её API
+  VacationPlanner.Reporting/       Модель календаря и её API
+  VacationPlanner.Scheduler/       Фоновые задачи очистки
+  VacationPlanner.Observability/   Общие метрики процессов, HTTP и логов
+  VacationPlanner.Importer/        CLI, CSV, БД импорта, собственные тесты
+tests/
+  VacationPlanner.UnitTests/       60 unit-тестов основной части
+  VacationPlanner.Smoke/           Консольные проверки без xUnit
+grafana/                           Источники данных и дашборды
+prometheus/                        Конфигурации Docker и запуска на хосте
+demo-importer.*                    Пошаговая демонстрация импортёра
 ```
 
-## Что дальше (план доработок)
+## Ограничения и дальнейшая работа
 
-- [x] React SPA (раздаётся API), годовой календарь-график отпусков
-- [x] Распределённая обработка событий: notifier (письма), audit (история), reporting (CQRS read-модель)
-- [x] Паттерн State (жизненный цикл заявки), черновик → отправка → отмена
-- [x] Redis-кэш баланса и списка пользователей
-- [x] Health-эндпоинты (`/health/live`, `/health/ready`)
-- [x] Realtime (SignalR): SPA обновляется при новой заявке/смене статуса
-- [x] «График отдела по дням»: выбор сотрудников, выделение отпусков промежутками дней и подсветка пересечений (красные дни + список)
-- [x] Аудит-консьюмер (fan-out по той же шине) + авто-закрытие «зависших» черновиков
-- [ ] Decorator (аудит через перехват уведомлений)
-- [ ] Keycloak (OIDC) вместо встроенного JWT (сейчас — локальный JWT с ролями)
-- [ ] Kafka как второй транспорт MassTransit
-
-## Импорт заявок из CSV
-
-[Запуск импортёра, примеры CSV и сценарий защиты](src/VacationPlanner.Importer/README.md).
+- Баланс кэшируется в Redis на 60 секунд; сразу после изменения заявки возможно старое значение.
+- `BalanceGate` упорядочивает расчёты внутри одного экземпляра API; это не распределённая блокировка всех операций подачи.
+- Дедупликация импортёра зависит от его журнала RequestId. При потере ответа после POST состояние `Unconfirmed` требует ручной сверки; автоматический повтор POST отключён. Подробнее — в инструкции импортёра.
+- Настройки Compose предназначены для разработки. Внешний OIDC/Keycloak, Kafka и полноценный CI/CD пока не реализованы.
+- Дальнейшие улучшения: инвалидация кэша после изменений, расширение интеграционных тестов и координация при нескольких экземплярах API.

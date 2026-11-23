@@ -21,6 +21,13 @@ public sealed class FakeUserRepository : IUserRepository
     public Task<List<User>> GetAllAsync(CancellationToken ct = default)
         => Task.FromResult(Users.ToList());
 
+    public Task AddAsync(User user, CancellationToken ct = default)
+    {
+        if (user.Id == 0) user.Id = Users.Select(u => u.Id).DefaultIfEmpty().Max() + 1;
+        Users.Add(user);
+        return Task.CompletedTask;
+    }
+
     public Task SaveAsync(CancellationToken ct = default)
     {
         SaveCalls++;

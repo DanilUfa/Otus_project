@@ -67,7 +67,7 @@ repo.Items =
     L(6, 1, LeaveStatus.Approved, LeaveType.Unpaid, "2026-06-01", "2026-06-05"),
     L(7, 1, LeaveStatus.Approved, LeaveType.Annual, "2026-08-03", "2026-08-10"),
 ];
-Ok("только Approved+Annual (8 дн) -> 20", await balance.GetRemainingAnnualDaysAsync(1, 2026) == 20);
+Ok("Submitted+Approved Annual (13 дн) -> 15", await balance.GetRemainingAnnualDaysAsync(1, 2026) == 15);
 
 repo.Items = [L(1, 1, LeaveStatus.Approved, LeaveType.Annual, "2026-06-01", "2026-06-21")];
 Ok("дни включительно (21) -> 7", await balance.GetRemainingAnnualDaysAsync(1, 2026) == 7);
@@ -90,8 +90,8 @@ repo.Items =
 Ok("заявка вне окна года не учитывается -> 23", await balance.GetRemainingAnnualDaysAsync(1, 2026) == 23);
 
 repo.Items = [L(1, 1, LeaveStatus.Approved, LeaveType.Annual, "2026-12-30", "2027-01-02")];
-Ok("стык годов 2026 -> 24", await balance.GetRemainingAnnualDaysAsync(1, 2026) == 24);
-Ok("стык годов 2027 -> 24", await balance.GetRemainingAnnualDaysAsync(1, 2027) == 24);
+Ok("стык годов 2026 (2 дня) -> 26", await balance.GetRemainingAnnualDaysAsync(1, 2026) == 26);
+Ok("стык годов 2027 (2 дня) -> 26", await balance.GetRemainingAnnualDaysAsync(1, 2027) == 26);
 
 Console.WriteLine("[Balance] окно года, передаваемое репозиторию");
 repo.Items = [];
@@ -144,6 +144,8 @@ static DateTime Dt(string s) => DateTime.SpecifyKind(DateTime.Parse(s), DateTime
 sealed class FakeRepo : VacationPlanner.Application.Contracts.ILeaveRepository
 {
     public List<LeaveRequest> Items { get; set; } = new();
+    public List<LeaveAttachment> AttachmentItems { get; } = new();
+    private int _nextAttachmentId = 1;
     public (int, DateTime, DateTime)? LastRange { get; private set; }
 
     public Task<List<LeaveRequest>> GetAllAsync(CancellationToken ct = default) => Task.FromResult(Items.ToList());
@@ -159,4 +161,32 @@ sealed class FakeRepo : VacationPlanner.Application.Contracts.ILeaveRepository
     public Task<List<LeaveRequest>> GetStaleDraftRequestsAsync(DateTime olderThan, CancellationToken ct = default)
         => Task.FromResult(Items.Where(r => r.Status == LeaveStatus.Draft && r.CreatedAt < olderThan).ToList());
     public Task SaveAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task<List<LeaveAttachment>> GetAttachmentsAsync(int leaveId, CancellationToken ct = default)
+        => Task.FromResult(AttachmentItems.Where(a => a.LeaveRequestId == leaveId).ToList());
+
+    public Task<LeaveAttachment?> GetAttachmentByIdAsync(int attachmentId, CancellationToken ct = default)
+        => Task.FromResult(AttachmentItems.FirstOrDefault(a => a.Id == attachmentId));
+
+    public Task AddAttachmentAsync(LeaveAttachment attachment, CancellationToken ct = default)
+    {
+        if (attachment.Id == 0) attachment.Id = _nextAttachmentId++;
+        AttachmentItems.Add(attachment);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAttachmentAsync(LeaveAttachment attachment, CancellationToken ct = default)
+    {
+        AttachmentItems.Remove(attachment);
+        return Task.CompletedTask;
+    }
+
+    public Task<Dictionary<int, int>> GetAttachmentCountsAsync(IEnumerable<int> leaveIds, CancellationToken ct = default)
+    {
+        var ids = leaveIds.ToHashSet();
+        return Task.FromResult(AttachmentItems
+            .Where(a => ids.Contains(a.LeaveRequestId))
+            .GroupBy(a => a.LeaveRequestId)
+            .ToDictionary(g => g.Key, g => g.Count()));
+    }
 }

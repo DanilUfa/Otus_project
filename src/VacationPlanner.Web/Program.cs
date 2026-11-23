@@ -1,3 +1,4 @@
+using VacationPlanner.Observability;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -31,6 +32,7 @@ var builder = WebApplication.CreateBuilder(args);
 // кидает исключение прямо из logger'а и роняет обработку запроса/консьюмера.
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
+builder.Logging.AddServiceErrorMetrics();
 
 // --- SPA static root: wwwroot каталога проекта Web ---
 // В dev (dotnet run) папка лежит в каталоге проекта (bin/Debug/net10.0/../../..),
@@ -112,6 +114,7 @@ builder.Services.AddHealthChecks()
     .AddCheck("redis", new TcpHealthCheck(redisHost, redisPort, "redis"));
 
 var app = builder.Build();
+app.UseServiceMetrics(mapEndpoint: false);
 
 // Применяем миграции EF Core (схема управляется миграциями).
 using (var scope = app.Services.CreateScope())

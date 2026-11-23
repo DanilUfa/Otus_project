@@ -1,12 +1,15 @@
+using VacationPlanner.Observability;
 using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using VacationPlanner.Infrastructure;
 using VacationPlanner.Notifier.Consumers;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseUrls(builder.Configuration["ASPNETCORE_URLS"] ?? "http://127.0.0.1:9401");
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
+builder.Logging.AddServiceErrorMetrics();
 
 // notifier — stateless сервис: только уведомления, без собственной БД.
 builder.Services.AddNotifications();
@@ -31,4 +34,5 @@ builder.Services.AddMassTransit(x =>
 });
 
 var host = builder.Build();
+host.UseServiceMetrics();
 await host.RunAsync();

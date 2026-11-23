@@ -19,3 +19,6 @@ NuGet/
 
 /docs/
 /logs/
+
+# Local importer demonstration data and encrypted database password
+.local-demo/

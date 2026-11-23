@@ -1,9 +1,22 @@
 global:
   scrape_interval: 5s
+  scrape_timeout: 4s
 
 scrape_configs:
   - job_name: vacation-api
     metrics_path: /metrics
     static_configs:
-      # API запущен на хосте (Docker-сборка api не используется из-за CA-проблемы).
-      - targets: ['host.docker.internal:5000']
+      - targets: ['api:80']
+        labels: { service: api }
+  - job_name: vacation-services
+    static_configs:
+      - targets: ['gateway:80']
+        labels: { service: gateway }
+      - targets: ['audit:80']
+        labels: { service: audit }
+      - targets: ['reporting:80']
+        labels: { service: reporting }
+      - targets: ['notifier:80']
+        labels: { service: notifier }
+      - targets: ['scheduler:80']
+        labels: { service: scheduler }

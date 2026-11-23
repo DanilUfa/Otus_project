@@ -33,7 +33,7 @@ function Wait-Log([string]$file,[string]$text,[int]$timeoutSec=150){
 
 if(-not $SkipInfra){
   Write-Host "[1/6] infra..."
-  docker compose up -d --no-build postgres redis rabbitmq prometheus grafana mailpit *>&1 | Tee-Object "$root\logs\infra.log"
+  docker compose -f docker-compose.yml -f docker-compose.host.yml up -d --no-build postgres redis rabbitmq prometheus grafana mailpit *>&1 | Tee-Object "$root\logs\infra.log"
   Write-Host "  waiting infra ports..."
   Wait-Port 5432|Out-Null; Wait-Port 5672|Out-Null; Wait-Port 6379|Out-Null
 }

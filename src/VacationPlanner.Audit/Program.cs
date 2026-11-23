@@ -1,3 +1,4 @@
+using VacationPlanner.Observability;
 using System.Text;
 using System.Reflection;
 using MassTransit;
@@ -13,6 +14,7 @@ var builder = WebApplication.CreateBuilder(args);
 // кидает исключение прямо из logger'а и роняет обработку запроса/консьюмера.
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
+builder.Logging.AddServiceErrorMetrics();
 
 // Своё хранилище: собственная БД vacation_audit (без доступа к данным api).
 builder.Services.AddAuditStorage(builder.Configuration);
@@ -62,6 +64,7 @@ builder.Services.AddMassTransit(x =>
 });
 
 var app = builder.Build();
+app.UseServiceMetrics();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AuditDbContext>();

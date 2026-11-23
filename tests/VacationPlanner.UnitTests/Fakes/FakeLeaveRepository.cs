@@ -47,6 +47,15 @@ public sealed class FakeLeaveRepository : ILeaveRepository
     public Task<List<LeaveAttachment>> GetAttachmentsAsync(int leaveId, CancellationToken ct = default)
         => Task.FromResult(AttachmentItems.Where(a => a.LeaveRequestId == leaveId).ToList());
 
+    public Task<Dictionary<int, int>> GetAttachmentCountsAsync(IEnumerable<int> leaveIds, CancellationToken ct = default)
+    {
+        var ids = leaveIds.ToHashSet();
+        return Task.FromResult(AttachmentItems
+            .Where(a => ids.Contains(a.LeaveRequestId))
+            .GroupBy(a => a.LeaveRequestId)
+            .ToDictionary(g => g.Key, g => g.Count()));
+    }
+
     public Task<LeaveAttachment?> GetAttachmentByIdAsync(int attachmentId, CancellationToken ct = default)
         => Task.FromResult(AttachmentItems.FirstOrDefault(a => a.Id == attachmentId));
 

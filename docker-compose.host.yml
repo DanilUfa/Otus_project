@@ -1,0 +1,5 @@
+# Used by run-dev.ps1: services run on Windows, infrastructure stays in Docker.
+services:
+  prometheus:
+    volumes:
+      - ./prometheus/prometheus.host.yml:/etc/prometheus/prometheus.yml:ro

@@ -1,10 +1,14 @@
+using VacationPlanner.Observability;
+using Microsoft.AspNetCore.Http.Features;
 using System.Net.WebSockets;
 using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders(); // без EventLog: в docker его нет, а на Windows без прав он рвёт соединения
 builder.Logging.AddConsole();
+builder.Logging.AddServiceErrorMetrics();
 var app = builder.Build();
+app.UseServiceMetrics();
 app.UseRouting();
 
 // Единая точка входа (API Gateway). Маршрутизация по префиксам.
@@ -122,13 +126,14 @@ static async Task ProxyHttpAsync(HttpContext ctx, Uri target, CancellationToken 
 
     // Content-заголовки (Content-Type и т.п.) должны попасть на HttpContent, а не в request headers:
     // создаём контент ДО копирования заголовков.
-    if (ctx.Request.ContentLength is > 0)
+    // JsonContent and streaming clients may use chunked requests without Content-Length.
+    if (ctx.Features.Get<IHttpRequestBodyDetectionFeature>()?.CanHaveBody == true)
         upstream.Content = new StreamContent(ctx.Request.Body);
 
     foreach (var h in ctx.Request.Headers)
     {
         if (h.Key.Equals("Host", StringComparison.OrdinalIgnoreCase)) continue;
-        if (h.Key.Equals("Connection", StringComparison.OrdinalIgnoreCase)) continue;
+        if (IsHopByHop(h.Key)) continue;
         if (h.Key.Equals("Content-Length", StringComparison.OrdinalIgnoreCase)) continue; // выставит HttpClient
         if (!upstream.Headers.TryAddWithoutValidation(h.Key, (IEnumerable<string>)h.Value))
             upstream.Content?.Headers.TryAddWithoutValidation(h.Key, (IEnumerable<string>)h.Value);

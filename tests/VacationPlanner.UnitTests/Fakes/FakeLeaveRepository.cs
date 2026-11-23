@@ -23,8 +23,12 @@ public sealed class FakeLeaveRepository : ILeaveRepository
     public Task<LeaveRequest?> GetByIdAsync(int id, CancellationToken ct = default)
         => Task.FromResult(Items.FirstOrDefault(r => r.Id == id));
 
+    public Task<int?> GetOwnerIdAsync(int id, CancellationToken ct = default)
+        => Task.FromResult(Items.FirstOrDefault(r => r.Id == id) is { } leave ? (int?)leave.UserId : null);
+
     public Task AddAsync(LeaveRequest request, CancellationToken ct = default)
     {
+        if (request.Id == 0) request.Id = Items.Select(r => r.Id).DefaultIfEmpty().Max() + 1;
         Items.Add(request);
         return Task.CompletedTask;
     }

@@ -13,6 +13,9 @@ public class LeaveRepository(AppDbContext db) : ILeaveRepository
     public Task<LeaveRequest?> GetByIdAsync(int id, CancellationToken ct = default)
         => db.LeaveRequests.FirstOrDefaultAsync(r => r.Id == id, ct);
 
+    public Task<int?> GetOwnerIdAsync(int id, CancellationToken ct = default)
+        => db.LeaveRequests.Where(r => r.Id == id).Select(r => (int?)r.UserId).FirstOrDefaultAsync(ct);
+
     public Task AddAsync(LeaveRequest request, CancellationToken ct = default)
     {
         db.LeaveRequests.Add(request);

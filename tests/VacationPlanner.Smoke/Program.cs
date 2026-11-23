@@ -151,6 +151,8 @@ sealed class FakeRepo : VacationPlanner.Application.Contracts.ILeaveRepository
     public Task<List<LeaveRequest>> GetAllAsync(CancellationToken ct = default) => Task.FromResult(Items.ToList());
     public Task<LeaveRequest?> GetByIdAsync(int id, CancellationToken ct = default)
         => Task.FromResult(Items.FirstOrDefault(r => r.Id == id));
+    public Task<int?> GetOwnerIdAsync(int id, CancellationToken ct = default)
+        => Task.FromResult(Items.FirstOrDefault(r => r.Id == id) is { } leave ? (int?)leave.UserId : null);
     public Task AddAsync(LeaveRequest request, CancellationToken ct = default)
     { Items.Add(request); return Task.CompletedTask; }
     public Task<List<LeaveRequest>> GetByUserInRangeAsync(int userId, DateTime from, DateTime to, CancellationToken ct = default)

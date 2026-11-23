@@ -19,10 +19,13 @@ public class LeaveService(
     IOutboxRepository outbox,
     IUnitOfWork unitOfWork,
     VacationMetrics metrics,
-    IRealtimeNotifier realtime)
+    IRealtimeNotifier realtime,
+    BalanceService balance,
+    BalanceGate balanceGate)
 {
     public async Task<LeaveRequestDto> SubmitAsync(CreateLeaveRequestRequest request, CancellationToken ct = default)
     {
+        using var balanceLock = await balanceGate.LockAsync(request.UserId, ct);
         var user = await userRepository.GetByIdWithManagerAsync(request.UserId, ct)
             ?? throw new NotFoundException($"Пользователь {request.UserId} не найден.");
 
@@ -66,6 +69,7 @@ public class LeaveService(
             throw;
         }
 
+        await balance.InvalidateAsync(leaveRequest);
         metrics.LeavesSubmitted.Add(1);
 
         // Realtime: владельцу и руководителю (best-effort, не должно ломать создание).
@@ -78,6 +82,7 @@ public class LeaveService(
     /// <summary>Отправляет сохранённый черновик (Draft → Submitted) на согласование.</summary>
     public async Task<LeaveRequestDto> SubmitDraftAsync(int id, int userId, CancellationToken ct = default)
     {
+        using var balanceLock = await balanceGate.LockAsync(userId, ct);
         var lr = await leaveRepository.GetByIdAsync(id, ct)
             ?? throw new NotFoundException($"Заявка {id} не найдена.");
         if (lr.UserId != userId)
@@ -98,6 +103,7 @@ public class LeaveService(
         await outbox.AddAsync(NewOutbox(submitted), ct);
         await leaveRepository.SaveAsync(ct); // одна транзакция: заявка + событие
 
+        await balance.InvalidateAsync(lr);
         metrics.LeavesSubmitted.Add(1);
 
         var dto = ToDto(lr, owner?.Name ?? $"User {lr.UserId}", owner?.ManagerId);
@@ -109,6 +115,7 @@ public class LeaveService(
     /// <summary>Отменяет заявку её автором (Draft → Cancelled, Submitted → Cancelled).</summary>
     public async Task CancelAsync(int id, int userId, CancellationToken ct = default)
     {
+        using var balanceLock = await balanceGate.LockAsync(userId, ct);
         var lr = await leaveRepository.GetByIdAsync(id, ct)
             ?? throw new NotFoundException($"Заявка {id} не найдена.");
         if (lr.UserId != userId)
@@ -125,6 +132,7 @@ public class LeaveService(
         lr.Status = LeaveStatus.Cancelled;
         await outbox.AddAsync(NewOutbox(cancelled), ct);
         await leaveRepository.SaveAsync(ct); // одна транзакция: статус + событие
+        await balance.InvalidateAsync(lr);
         try { await realtime.NotifyStatusChangedAsync(lr.Id, LeaveStatus.Cancelled.ToString(), lr.UserId, ct); } catch { }
     }
 
@@ -148,6 +156,11 @@ public class LeaveService(
 
     public async Task UpdateStatusAsync(int id, LeaveStatus newStatus, int approverUserId, CancellationToken ct = default)
     {
+        var ownerId = await leaveRepository.GetOwnerIdAsync(id, ct)
+            ?? throw new NotFoundException($"Заявка {id} не найдена.");
+        using var balanceLock = await balanceGate.LockAsync(ownerId, ct);
+
+        // Load the mutable entity after acquiring the lock, not from a stale tracked snapshot.
         var lr = await leaveRepository.GetByIdAsync(id, ct)
             ?? throw new NotFoundException($"Заявка {id} не найдена.");
 
@@ -167,6 +180,7 @@ public class LeaveService(
         await outbox.AddAsync(NewOutbox(changed), ct);
         await leaveRepository.SaveAsync(ct); // одна транзакция: статус + событие
 
+        await balance.InvalidateAsync(lr);
         if (newStatus == LeaveStatus.Approved) metrics.LeavesApproved.Add(1);
         else if (newStatus == LeaveStatus.Declined) metrics.LeavesDeclined.Add(1);
 

@@ -365,8 +365,8 @@ api.MapGet("/balance/{userId:int}", async (
                 throw new UnauthorizedAccessException("Запрос баланса другого сотрудника доступен руководителю.");
 
             var y = year ?? DateTime.UtcNow.Year;
-            // Balance changes on submission/cancellation/decision, including CSV imports.
-            // Read the primary database so an old in-flight cache fill cannot restore stale quota.
+            // Redis is handled inside BalanceService under the same lock as leave writes.
+            // Browsers/proxies must still request the server's current balance.
             context.Response.Headers.CacheControl = "no-store";
             var remaining = await balance.GetRemainingAnnualDaysAsync(userId, y, ct);
             return Results.Ok(new { year = y, remaining });

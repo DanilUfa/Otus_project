@@ -4,9 +4,9 @@ using VacationPlanner.Domain.Entities;
 namespace VacationPlanner.Application.Patterns;
 
 /// <summary>
-/// PATTERN: Factory Method.
+/// PATTERN: Simple Factory.
 /// Создаёт заявку нужного типа/статуса, скрывая детали инициализации
-/// от вызывающего кода. Дальнейшие ветвления подтипов можно добавить здесь же.
+/// от вызывающего кода.
 /// </summary>
 public static class LeaveRequestFactory
 {

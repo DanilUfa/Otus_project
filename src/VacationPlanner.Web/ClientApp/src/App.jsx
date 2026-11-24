@@ -9,12 +9,18 @@ const MONTHS = [
 ];
 const YEAR = new Date().getFullYear();
 const pd = (s) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
+const dateFromToday = (offset = 0) => {
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
 
 export default function App() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || 'null'));
   const [error, setError] = useState('');
   const [, force] = useState(0);
   const [calendarRevision, setCalendarRevision] = useState(0);
+  const [balanceRevision, setBalanceRevision] = useState(0);
 
   useEffect(() => { if (user) refresh(); }, [user]);
 
@@ -51,15 +57,14 @@ export default function App() {
   }, [user]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   async function refresh() {
+    setBalanceRevision(value => value + 1);
     try {
-      const [leaves, users, balance] = await Promise.all([
+      const [leaves, users] = await Promise.all([
         api.leaves(),
-        api.users(),
-        api.balance(user.userId, YEAR)
+        api.users()
       ]);
       sessionStorage.setItem('leaves', JSON.stringify(leaves));
       sessionStorage.setItem('users', JSON.stringify(users));
-      sessionStorage.setItem('balance', JSON.stringify(balance));
       setError('');
       force(x => x + 1);
     } catch (e) { setError(String(e.message)); }
@@ -88,9 +93,7 @@ export default function App() {
       <main>
         <section>
           <h2>Сводка</h2>
-          <Data getter={sessionStorage} k="balance" render={(b) => (
-            <div className="balance">Остаток годового отпуска: <b>{b.remaining}</b> дн. <small>({b.year})</small></div>
-          )} />
+          <AnnualBalance key={user.userId} userId={user.userId} revision={balanceRevision} />
         </section>
 
         <section>
@@ -112,10 +115,36 @@ export default function App() {
   );
 }
 
-/* ----------  Разное ---------- */
-function Data({ getter, k, render }) {
-  const raw = getter.getItem(k);
-  return raw ? render(JSON.parse(raw)) : <span className="dim">—</span>;
+/* ----------  Остаток отпуска за выбранный год ---------- */
+function AnnualBalance({ userId, revision }) {
+  const [year, setYear] = useState(YEAR);
+  const [balance, setBalance] = useState(null);
+  const [loadError, setLoadError] = useState('');
+  const years = Array.from({ length: 11 }, (_, index) => YEAR - 5 + index);
+
+  useEffect(() => {
+    let active = true;
+    setLoadError('');
+    api.balance(userId, year)
+      .then(result => { if (active) setBalance(result); })
+      .catch(error => { if (active) setLoadError(error.message); });
+    return () => { active = false; };
+  }, [userId, year, revision]);
+
+  return (
+    <div className="balance-panel">
+      <label className="balance-year">Год расчёта
+        <select value={year} onChange={event => setYear(Number(event.target.value))}>
+          {years.map(value => <option key={value} value={value}>{value}</option>)}
+        </select>
+      </label>
+      <div className="balance" aria-live="polite">
+        {loadError ? <span className="error">Не удалось загрузить остаток: {loadError}</span> :
+          balance?.year === year ? <>Остаток годового отпуска: <b>{balance.remaining}</b> дн. <small>({year})</small></> :
+            <span className="dim">Загрузка остатка за {year} год…</span>}
+      </div>
+    </div>
+  );
 }
 
 /* ----------  Вход ---------- */
@@ -283,8 +312,8 @@ function Login({ onLogin }) {
 /* ----------  Подача заявки ---------- */
 function SubmitForm({ userId, onDone }) {
   const [type, setType] = useState(TYPE_VALUES.Annual);
-  const [start, setStart] = useState(`${YEAR}-07-01`);
-  const [end, setEnd] = useState(`${YEAR}-07-14`);
+  const [start, setStart] = useState(() => dateFromToday());
+  const [end, setEnd] = useState(() => dateFromToday(13));
   const [reason, setReason] = useState('');
   const [file, setFile] = useState(null);
   const [msg, setMsg] = useState('');

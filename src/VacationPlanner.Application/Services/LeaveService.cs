@@ -171,9 +171,10 @@ public class LeaveService(
         var owner = await userRepository.GetByIdAsync(lr.UserId, ct)
             ?? throw new NotFoundException($"Сотрудник заявки {id} не найден.");
 
-        // Только непосредственный руководитель сотрудника утверждает/отклоняет.
-        if (owner.ManagerId != approverUserId)
-            throw new UnauthorizedAccessException("Заявку может утвердить руководитель сотрудника.");
+        // Руководитель согласует заявки подчинённых и собственные заявки.
+        var managerApprovingOwnLeave = owner.Id == approverUserId && owner.Role == UserRole.Manager;
+        if (owner.ManagerId != approverUserId && !managerApprovingOwnLeave)
+            throw new UnauthorizedAccessException("Согласовать заявку может руководитель сотрудника или менеджер — автор заявки.");
 
         // State: запрещаем нелегальные переходы (например, утвердить уже отклонённую/не поданную).
         LeaveState.For(lr.Status).EnsureCanTransitionTo(newStatus);

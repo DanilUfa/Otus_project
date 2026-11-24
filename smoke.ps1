@@ -1,7 +1,7 @@
 <#
   End-to-end smoke test: login -> submit -> approve -> draft draft->submit->approve
   -> draft->cancel -> balance & metrics.
-  Result is written to logs\smoke.log (the agent reads it; nothing to copy).
+  Result is written to logs\smoke.log.
 
   Requires API running (run-dev.ps1) and fresh DB (manager id=1, employee id=2).
 #>

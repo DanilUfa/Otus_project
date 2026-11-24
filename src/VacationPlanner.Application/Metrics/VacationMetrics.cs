@@ -5,7 +5,6 @@ namespace VacationPlanner.Application.Metrics;
 /// <summary>
 /// Бизнес-метрики через стандартный .NET API <see cref="Meter"/> (System.Diagnostics.Metrics).
 /// Счётчики инкрементятся в сервисах; эндпоинт /metrics экспортирует их в формат Prometheus.
-/// (Fork OpenTelemetry: Meter — общий контракт, экспортёр у нас свой, лёгкий.)
 /// </summary>
 public sealed class VacationMetrics
 {

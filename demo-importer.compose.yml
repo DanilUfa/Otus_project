@@ -3,6 +3,7 @@ name: vacation-importer-demo
 services:
   db:
     image: postgres:16-alpine
+    ports: ["127.0.0.1:55434:5432"]
     environment:
       POSTGRES_DB: vacation_importer
       POSTGRES_USER: importer

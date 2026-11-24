@@ -9,7 +9,7 @@ using VacationPlanner.Infrastructure;
 namespace VacationPlanner.Audit.Consumers;
 
 /// <summary>
-/// Микросервис <b>audit</b>: фиксирует смену статуса в СВОЕЙ БД (история = Memento).
+/// Фиксирует смену статуса заявки в отдельной базе аудита.
 /// Идемпотентность: unique (RequestId, Action, Detail) — redelivery не дублирует запись.
 /// </summary>
 public class LeaveStatusAuditConsumer(

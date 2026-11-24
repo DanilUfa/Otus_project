@@ -3,9 +3,9 @@ using System.Collections.Concurrent;
 namespace VacationPlanner.Web.Auth;
 
 /// <summary>
-/// Простейший in-memory throttle попыток входа (per-email, скользящее окно 15 мин).
-/// Честная оговорка: состояние живёт в памяти одного инстанса api — при репликации
-/// понадобится распределённый счётчик (Redis / ASP.NET RateLimiting с Redis).
+/// Ограничивает попытки входа по email в пределах 15-минутного окна.
+/// Счётчики хранятся в памяти одного экземпляра API; для нескольких экземпляров
+/// требуется общее хранилище счётчиков.
 /// </summary>
 public sealed class LoginThrottle
 {

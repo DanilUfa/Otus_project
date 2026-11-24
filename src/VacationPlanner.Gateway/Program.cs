@@ -82,7 +82,7 @@ app.MapGet("/gateway/routes", () => Results.Ok(new
     upstreams = new[]
     {
         new { prefix = "/api/reports", target = reporting, service = "reporting (CQRS read-model)", example = "GET /api/reports/calendar?year=2026" },
-        new { prefix = "/api/audit",   target = audit,    service = "audit (audit trail / Memento)", example = "GET /api/audit?requestId=5" },
+        new { prefix = "/api/audit",   target = audit,    service = "audit (audit trail)", example = "GET /api/audit?requestId=5" },
         new { prefix = "*",            target = api,      service = "api (write-side, SPA, /hubs SignalR ws)", example = "POST /api/leave · GET /api/balance/2?year=2026" }
     }
 }));

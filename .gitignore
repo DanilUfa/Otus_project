@@ -8,7 +8,7 @@ node_modules/
 dist/
 src/VacationPlanner.Web/wwwroot/assets/
 
-# local logs (the agent reads these, no need to commit)
+# local logs
 logs/
 *.pid
 

@@ -34,6 +34,9 @@ button.ghost { background: transparent; color: var(--brand); border: 1px solid v
 .row a { font-size: 13px; color: var(--brand); }
 
 .balance { font-size: 15px; }
+.balance-panel { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+.balance-year { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.balance-year select { min-width: 105px; }
 .balance b { font-size: 22px; color: var(--brand); }
 
 table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }

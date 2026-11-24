@@ -1,6 +1,6 @@
 <#
     shot.ps1 - captures the primary screen into logs\screen.png
-    so the agent can read_image it and verify the site visually.
+    for visual verification of the application.
     ASCII-only (PowerShell 5.1 safe).
 #>
 $ErrorActionPreference = 'Stop'

@@ -1,5 +1,5 @@
 <#
-  One-command Git init + first commit. Result is written to logs\git.log (the agent reads it).
+  Initializes Git and creates a commit. Result is written to logs\git.log.
   Robust against CRLF warnings and stderr noise from git.
 
   Usage:

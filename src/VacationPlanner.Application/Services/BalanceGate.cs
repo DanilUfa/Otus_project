@@ -3,18 +3,14 @@ using System.Collections.Concurrent;
 namespace VacationPlanner.Application.Services;
 
 /// <summary>
-/// PATTERN: Примитив синхронизации (SemaphoreSlim).
-///
-/// Баланс дней — общий ресурс: несколько Worker'ов могут одновременно добавлять
-/// заявки по одному пользователю, и была бы гонка (double-spend дней).
-/// Здесь каждому пользователю даётся свой async-замок, чтобы пересчёт был атомарным
-/// по одному сотруднику. Экземпляр синглтон.
+/// Сериализует расчёт баланса и изменения заявок одного сотрудника через SemaphoreSlim.
+/// Зарегистрирован как Singleton; синхронизация действует в пределах одного процесса API.
 /// </summary>
 public class BalanceGate
 {
     private readonly ConcurrentDictionary<int, SemaphoreSlim> _gates = new();
 
-    /// <summary>Берёт async-замок по пользователю. Верни в using.</summary>
+    /// <summary>Захватывает блокировку сотрудника; Dispose освобождает её.</summary>
     public IDisposable Lock(int userId)
     {
         var sem = _gates.GetOrAdd(userId, _ => new SemaphoreSlim(1, 1));
